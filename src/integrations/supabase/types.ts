@@ -137,6 +137,8 @@ export type Database = {
           id: string
           last_name: string
           phone: string | null
+          referral_level: number | null
+          referred_by: string | null
           updated_at: string | null
           username: string
         }
@@ -147,6 +149,8 @@ export type Database = {
           id?: string
           last_name: string
           phone?: string | null
+          referral_level?: number | null
+          referred_by?: string | null
           updated_at?: string | null
           username: string
         }
@@ -157,10 +161,20 @@ export type Database = {
           id?: string
           last_name?: string
           phone?: string | null
+          referral_level?: number | null
+          referred_by?: string | null
           updated_at?: string | null
           username?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "people_referred_by_fkey"
+            columns: ["referred_by"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -199,6 +213,7 @@ export type Database = {
           id: string
           price: number
           property_type: Database["public"]["Enums"]["property_type"]
+          sold_by: string | null
           updated_at: string | null
         }
         Insert: {
@@ -207,6 +222,7 @@ export type Database = {
           id?: string
           price: number
           property_type: Database["public"]["Enums"]["property_type"]
+          sold_by?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -215,7 +231,82 @@ export type Database = {
           id?: string
           price?: number
           property_type?: Database["public"]["Enums"]["property_type"]
+          sold_by?: string | null
           updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "properties_sold_by_fkey"
+            columns: ["sold_by"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referral_commissions: {
+        Row: {
+          calculated_at: string | null
+          commission_amount: number
+          commission_percentage: number
+          id: string
+          property_id: string | null
+          referral_level: number
+          referrer_id: string | null
+        }
+        Insert: {
+          calculated_at?: string | null
+          commission_amount: number
+          commission_percentage: number
+          id?: string
+          property_id?: string | null
+          referral_level: number
+          referrer_id?: string | null
+        }
+        Update: {
+          calculated_at?: string | null
+          commission_amount?: number
+          commission_percentage?: number
+          id?: string
+          property_id?: string | null
+          referral_level?: number
+          referrer_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_commissions_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referral_commissions_referrer_id_fkey"
+            columns: ["referrer_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referral_levels: {
+        Row: {
+          commission_percentage: number
+          created_at: string | null
+          id: string
+          level: number
+        }
+        Insert: {
+          commission_percentage: number
+          created_at?: string | null
+          id?: string
+          level: number
+        }
+        Update: {
+          commission_percentage?: number
+          created_at?: string | null
+          id?: string
+          level?: number
         }
         Relationships: []
       }
@@ -224,7 +315,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_referral_chain: {
+        Args: { seller_id: string }
+        Returns: {
+          person_id: string
+          username: string
+          first_name: string
+          last_name: string
+          level: number
+        }[]
+      }
     }
     Enums: {
       property_type:

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, LogOut, Calculator, Users, User, DollarSign } from 'lucide-react';
+import { Search, LogOut, Calculator, Users, User, DollarSign, UserCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import CommissionCalculator from './CommissionCalculator';
 
@@ -20,6 +20,8 @@ interface PersonEarning {
   email: string;
   total_earnings: number;
   commission_count: number;
+  referral_earnings: number;
+  referral_count: number;
 }
 
 interface PropertyCommission {
@@ -29,7 +31,9 @@ interface PropertyCommission {
   commission_amount: number;
   commission_percentage: number;
   calculated_at: string;
-  level_name: string;
+  level_name?: string;
+  referral_level?: number;
+  commission_type: 'level' | 'referral';
 }
 
 const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
@@ -38,7 +42,8 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
   const [totalStats, setTotalStats] = useState({
     totalPeople: 0,
     totalProperties: 0,
-    totalCommissions: 0
+    totalCommissions: 0,
+    totalReferralCommissions: 0
   });
   const [loading, setLoading] = useState(true);
   const [selectedPersonCommissions, setSelectedPersonCommissions] = useState<PropertyCommission[]>([]);
@@ -52,24 +57,39 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     try {
       setLoading(true);
 
-      // Fetch people with their total earnings
-      const { data: commissionData, error: commissionError } = await supabase
-        .from('commissions')
-        .select(`
-          person_id,
-          commission_amount,
-          people!inner(id, username, first_name, last_name, email)
-        `);
+      // Fetch people with their total earnings from both regular and referral commissions
+      const [levelCommissionsResult, referralCommissionsResult] = await Promise.all([
+        supabase
+          .from('commissions')
+          .select(`
+            person_id,
+            commission_amount,
+            people!inner(id, username, first_name, last_name, email)
+          `),
+        supabase
+          .from('referral_commissions')
+          .select(`
+            referrer_id,
+            commission_amount,
+            people!inner(id, username, first_name, last_name, email)
+          `)
+      ]);
 
-      if (commissionError) {
-        console.error('Error fetching commissions:', commissionError);
+      if (levelCommissionsResult.error) {
+        console.error('Error fetching level commissions:', levelCommissionsResult.error);
+        return;
+      }
+
+      if (referralCommissionsResult.error) {
+        console.error('Error fetching referral commissions:', referralCommissionsResult.error);
         return;
       }
 
       // Group commissions by person
       const earningsMap = new Map<string, PersonEarning>();
       
-      commissionData?.forEach((item) => {
+      // Process level commissions
+      levelCommissionsResult.data?.forEach((item) => {
         const person = item.people;
         const personId = person.id;
         
@@ -85,7 +105,34 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
             last_name: person.last_name,
             email: person.email,
             total_earnings: Number(item.commission_amount),
-            commission_count: 1
+            commission_count: 1,
+            referral_earnings: 0,
+            referral_count: 0
+          });
+        }
+      });
+
+      // Process referral commissions
+      referralCommissionsResult.data?.forEach((item) => {
+        const person = item.people;
+        const personId = person.id;
+        
+        if (earningsMap.has(personId)) {
+          const existing = earningsMap.get(personId)!;
+          existing.total_earnings += Number(item.commission_amount);
+          existing.referral_earnings += Number(item.commission_amount);
+          existing.referral_count += 1;
+        } else {
+          earningsMap.set(personId, {
+            id: person.id,
+            username: person.username,
+            first_name: person.first_name,
+            last_name: person.last_name,
+            email: person.email,
+            total_earnings: Number(item.commission_amount),
+            commission_count: 0,
+            referral_earnings: Number(item.commission_amount),
+            referral_count: 1
           });
         }
       });
@@ -93,20 +140,26 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
       setPeopleEarnings(Array.from(earningsMap.values()));
 
       // Fetch total stats
-      const [peopleResult, propertiesResult, commissionsResult] = await Promise.all([
+      const [peopleResult, propertiesResult, commissionsResult, referralCommissionsResult2] = await Promise.all([
         supabase.from('people').select('id', { count: 'exact', head: true }),
         supabase.from('properties').select('id', { count: 'exact', head: true }),
-        supabase.from('commissions').select('commission_amount')
+        supabase.from('commissions').select('commission_amount'),
+        supabase.from('referral_commissions').select('commission_amount')
       ]);
 
       const totalCommissionAmount = commissionsResult.data?.reduce(
         (sum, item) => sum + Number(item.commission_amount), 0
       ) || 0;
 
+      const totalReferralCommissionAmount = referralCommissionsResult2.data?.reduce(
+        (sum, item) => sum + Number(item.commission_amount), 0
+      ) || 0;
+
       setTotalStats({
         totalPeople: peopleResult.count || 0,
         totalProperties: propertiesResult.count || 0,
-        totalCommissions: totalCommissionAmount
+        totalCommissions: totalCommissionAmount,
+        totalReferralCommissions: totalReferralCommissionAmount
       });
 
     } catch (error) {
@@ -118,35 +171,73 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
 
   const fetchPersonCommissions = async (personId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('commissions')
-        .select(`
-          id,
-          commission_amount,
-          commission_percentage,
-          calculated_at,
-          properties!inner(price, property_type),
-          levels!inner(name)
-        `)
-        .eq('person_id', personId)
-        .order('calculated_at', { ascending: false });
+      // Fetch both level and referral commissions
+      const [levelCommissions, referralCommissions] = await Promise.all([
+        supabase
+          .from('commissions')
+          .select(`
+            id,
+            commission_amount,
+            commission_percentage,
+            calculated_at,
+            properties!inner(price, property_type),
+            levels!inner(name)
+          `)
+          .eq('person_id', personId)
+          .order('calculated_at', { ascending: false }),
+        supabase
+          .from('referral_commissions')
+          .select(`
+            id,
+            commission_amount,
+            commission_percentage,
+            referral_level,
+            calculated_at,
+            properties!inner(price, property_type)
+          `)
+          .eq('referrer_id', personId)
+          .order('calculated_at', { ascending: false })
+      ]);
 
-      if (error) {
-        console.error('Error fetching person commissions:', error);
+      if (levelCommissions.error) {
+        console.error('Error fetching level commissions:', levelCommissions.error);
         return;
       }
 
-      const formattedCommissions: PropertyCommission[] = data.map(item => ({
-        id: item.id,
-        property_price: Number(item.properties.price),
-        property_type: item.properties.property_type,
-        commission_amount: Number(item.commission_amount),
-        commission_percentage: Number(item.commission_percentage),
-        calculated_at: item.calculated_at,
-        level_name: item.levels.name
-      }));
+      if (referralCommissions.error) {
+        console.error('Error fetching referral commissions:', referralCommissions.error);
+        return;
+      }
 
-      setSelectedPersonCommissions(formattedCommissions);
+      const allCommissions: PropertyCommission[] = [
+        // Level commissions
+        ...(levelCommissions.data?.map(item => ({
+          id: item.id,
+          property_price: Number(item.properties.price),
+          property_type: item.properties.property_type,
+          commission_amount: Number(item.commission_amount),
+          commission_percentage: Number(item.commission_percentage),
+          calculated_at: item.calculated_at,
+          level_name: item.levels.name,
+          commission_type: 'level' as const
+        })) || []),
+        // Referral commissions
+        ...(referralCommissions.data?.map(item => ({
+          id: item.id,
+          property_price: Number(item.properties.price),
+          property_type: item.properties.property_type,
+          commission_amount: Number(item.commission_amount),
+          commission_percentage: Number(item.commission_percentage),
+          calculated_at: item.calculated_at,
+          referral_level: item.referral_level,
+          commission_type: 'referral' as const
+        })) || [])
+      ];
+
+      // Sort by date
+      allCommissions.sort((a, b) => new Date(b.calculated_at).getTime() - new Date(a.calculated_at).getTime());
+
+      setSelectedPersonCommissions(allCommissions);
       setSelectedPersonId(personId);
     } catch (error) {
       console.error('Error fetching person commissions:', error);
@@ -219,7 +310,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
           </TabsContent>
 
           <TabsContent value="dashboard" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total People</CardTitle>
@@ -248,7 +339,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
               
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Commissions</CardTitle>
+                  <CardTitle className="text-sm font-medium">Level Commissions</CardTitle>
                   <DollarSign className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
@@ -256,7 +347,22 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                     ${totalStats.totalCommissions.toLocaleString()}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Total paid out
+                    Traditional commissions
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Referral Commissions</CardTitle>
+                  <UserCheck className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    ${totalStats.totalReferralCommissions.toLocaleString()}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Referral-based commissions
                   </p>
                 </CardContent>
               </Card>
@@ -286,7 +392,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                           ${person.total_earnings.toLocaleString()}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {person.commission_count} commissions
+                          {person.commission_count} level + {person.referral_count} referral
                         </div>
                       </div>
                     </div>
@@ -334,6 +440,10 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                               ${person.total_earnings.toLocaleString()}
                             </div>
                             <div className="text-sm text-gray-500">Total Earnings</div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              Level: ${(person.total_earnings - person.referral_earnings).toLocaleString()} | 
+                              Referral: ${person.referral_earnings.toLocaleString()}
+                            </div>
                             <Button
                               onClick={() => fetchPersonCommissions(person.id)}
                               variant="outline"
@@ -355,7 +465,12 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                                   <span className="text-gray-500 ml-2">
                                     (${commission.property_price.toLocaleString()})
                                   </span>
-                                  <span className="text-gray-500 ml-2">- {commission.level_name}</span>
+                                  {commission.commission_type === 'level' && commission.level_name && (
+                                    <span className="text-gray-500 ml-2">- {commission.level_name}</span>
+                                  )}
+                                  {commission.commission_type === 'referral' && commission.referral_level && (
+                                    <span className="text-green-600 ml-2">- Referral Level {commission.referral_level}</span>
+                                  )}
                                 </div>
                                 <div className="text-right">
                                   <div className="font-medium">
