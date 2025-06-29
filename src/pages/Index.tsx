@@ -1,33 +1,51 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { User } from '@supabase/supabase-js';
 import LoginForm from '@/components/LoginForm';
 import AdminDashboard from '@/components/AdminDashboard';
 
 const Index = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleLogin = (username: string, password: string) => {
-    // Simple authentication logic (in real app, this would be server-side)
-    if (username === 'admin' && password === 'admin123') {
-      setIsLoggedIn(true);
-      setCurrentUser(username);
-      console.log('Admin logged in successfully');
-    } else {
-      alert('Invalid credentials. Use admin/admin123 for demo.');
-    }
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
   };
 
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    setCurrentUser(null);
-    console.log('Admin logged out');
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
-      {!isLoggedIn ? (
-        <LoginForm onLogin={handleLogin} />
+      {!user ? (
+        <LoginForm />
       ) : (
         <AdminDashboard onLogout={handleLogout} />
       )}

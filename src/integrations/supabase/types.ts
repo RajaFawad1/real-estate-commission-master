@@ -9,7 +9,216 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      commissions: {
+        Row: {
+          calculated_at: string | null
+          commission_amount: number
+          commission_percentage: number
+          id: string
+          level_id: string | null
+          person_id: string | null
+          property_id: string | null
+        }
+        Insert: {
+          calculated_at?: string | null
+          commission_amount: number
+          commission_percentage: number
+          id?: string
+          level_id?: string | null
+          person_id?: string | null
+          property_id?: string | null
+        }
+        Update: {
+          calculated_at?: string | null
+          commission_amount?: number
+          commission_percentage?: number
+          id?: string
+          level_id?: string | null
+          person_id?: string | null
+          property_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commissions_level_id_fkey"
+            columns: ["level_id"]
+            isOneToOne: false
+            referencedRelation: "levels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commissions_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commissions_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      level_people: {
+        Row: {
+          id: string
+          level_id: string | null
+          person_id: string | null
+        }
+        Insert: {
+          id?: string
+          level_id?: string | null
+          person_id?: string | null
+        }
+        Update: {
+          id?: string
+          level_id?: string | null
+          person_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "level_people_level_id_fkey"
+            columns: ["level_id"]
+            isOneToOne: false
+            referencedRelation: "levels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "level_people_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      levels: {
+        Row: {
+          commission_percentage: number
+          created_at: string | null
+          id: string
+          level_order: number
+          name: string
+          property_id: string | null
+        }
+        Insert: {
+          commission_percentage: number
+          created_at?: string | null
+          id?: string
+          level_order: number
+          name: string
+          property_id?: string | null
+        }
+        Update: {
+          commission_percentage?: number
+          created_at?: string | null
+          id?: string
+          level_order?: number
+          name?: string
+          property_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "levels_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      people: {
+        Row: {
+          created_at: string | null
+          email: string
+          first_name: string
+          id: string
+          last_name: string
+          phone: string | null
+          updated_at: string | null
+          username: string
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          first_name: string
+          id?: string
+          last_name: string
+          phone?: string | null
+          updated_at?: string | null
+          username: string
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          first_name?: string
+          id?: string
+          last_name?: string
+          phone?: string | null
+          updated_at?: string | null
+          username?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          first_name: string | null
+          id: string
+          last_name: string | null
+          role: string | null
+          updated_at: string | null
+          username: string
+        }
+        Insert: {
+          created_at?: string | null
+          first_name?: string | null
+          id: string
+          last_name?: string | null
+          role?: string | null
+          updated_at?: string | null
+          username: string
+        }
+        Update: {
+          created_at?: string | null
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          role?: string | null
+          updated_at?: string | null
+          username?: string
+        }
+        Relationships: []
+      }
+      properties: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          id: string
+          price: number
+          property_type: Database["public"]["Enums"]["property_type"]
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          price: number
+          property_type: Database["public"]["Enums"]["property_type"]
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          price?: number
+          property_type?: Database["public"]["Enums"]["property_type"]
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -18,7 +227,12 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      property_type:
+        | "residential"
+        | "commercial"
+        | "industrial"
+        | "land"
+        | "luxury"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -133,6 +347,14 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      property_type: [
+        "residential",
+        "commercial",
+        "industrial",
+        "land",
+        "luxury",
+      ],
+    },
   },
 } as const

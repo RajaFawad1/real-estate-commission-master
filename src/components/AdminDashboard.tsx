@@ -1,51 +1,174 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, LogOut, Calculator, Users, User } from 'lucide-react';
+import { Search, LogOut, Calculator, Users, User, DollarSign } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import CommissionCalculator from './CommissionCalculator';
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
+interface PersonEarning {
+  id: string;
+  username: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  total_earnings: number;
+  commission_count: number;
+}
+
+interface PropertyCommission {
+  id: string;
+  property_price: number;
+  property_type: string;
+  commission_amount: number;
+  commission_percentage: number;
+  calculated_at: string;
+  level_name: string;
+}
+
 const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [peopleEarnings, setPeopleEarnings] = useState<PersonEarning[]>([]);
+  const [totalStats, setTotalStats] = useState({
+    totalPeople: 0,
+    totalProperties: 0,
+    totalCommissions: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [selectedPersonCommissions, setSelectedPersonCommissions] = useState<PropertyCommission[]>([]);
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   
-  // Mock data for demonstration
-  const mockEarnings = [
-    {
-      id: '1',
-      username: 'john_doe',
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john@example.com',
-      totalEarnings: 25000,
-      properties: [
-        { id: '1', type: 'Residential', price: 500000, commission: 15000, date: '2024-01-15' },
-        { id: '2', type: 'Commercial', price: 800000, commission: 10000, date: '2024-02-20' }
-      ]
-    },
-    {
-      id: '2',
-      username: 'jane_smith',
-      firstName: 'Jane',
-      lastName: 'Smith',
-      email: 'jane@example.com',
-      totalEarnings: 18000,
-      properties: [
-        { id: '3', type: 'Luxury', price: 1200000, commission: 18000, date: '2024-03-10' }
-      ]
-    }
-  ];
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
 
-  const filteredEarnings = mockEarnings.filter(person =>
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch people with their total earnings
+      const { data: commissionData, error: commissionError } = await supabase
+        .from('commissions')
+        .select(`
+          person_id,
+          commission_amount,
+          people!inner(id, username, first_name, last_name, email)
+        `);
+
+      if (commissionError) {
+        console.error('Error fetching commissions:', commissionError);
+        return;
+      }
+
+      // Group commissions by person
+      const earningsMap = new Map<string, PersonEarning>();
+      
+      commissionData?.forEach((item) => {
+        const person = item.people;
+        const personId = person.id;
+        
+        if (earningsMap.has(personId)) {
+          const existing = earningsMap.get(personId)!;
+          existing.total_earnings += Number(item.commission_amount);
+          existing.commission_count += 1;
+        } else {
+          earningsMap.set(personId, {
+            id: person.id,
+            username: person.username,
+            first_name: person.first_name,
+            last_name: person.last_name,
+            email: person.email,
+            total_earnings: Number(item.commission_amount),
+            commission_count: 1
+          });
+        }
+      });
+
+      setPeopleEarnings(Array.from(earningsMap.values()));
+
+      // Fetch total stats
+      const [peopleResult, propertiesResult, commissionsResult] = await Promise.all([
+        supabase.from('people').select('id', { count: 'exact', head: true }),
+        supabase.from('properties').select('id', { count: 'exact', head: true }),
+        supabase.from('commissions').select('commission_amount')
+      ]);
+
+      const totalCommissionAmount = commissionsResult.data?.reduce(
+        (sum, item) => sum + Number(item.commission_amount), 0
+      ) || 0;
+
+      setTotalStats({
+        totalPeople: peopleResult.count || 0,
+        totalProperties: propertiesResult.count || 0,
+        totalCommissions: totalCommissionAmount
+      });
+
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPersonCommissions = async (personId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('commissions')
+        .select(`
+          id,
+          commission_amount,
+          commission_percentage,
+          calculated_at,
+          properties!inner(price, property_type),
+          levels!inner(name)
+        `)
+        .eq('person_id', personId)
+        .order('calculated_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching person commissions:', error);
+        return;
+      }
+
+      const formattedCommissions: PropertyCommission[] = data.map(item => ({
+        id: item.id,
+        property_price: Number(item.properties.price),
+        property_type: item.properties.property_type,
+        commission_amount: Number(item.commission_amount),
+        commission_percentage: Number(item.commission_percentage),
+        calculated_at: item.calculated_at,
+        level_name: item.levels.name
+      }));
+
+      setSelectedPersonCommissions(formattedCommissions);
+      setSelectedPersonId(personId);
+    } catch (error) {
+      console.error('Error fetching person commissions:', error);
+    }
+  };
+
+  const filteredEarnings = peopleEarnings.filter(person =>
     person.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    person.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    person.lastName.toLowerCase().includes(searchTerm.toLowerCase())
+    person.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    person.last_name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -103,7 +226,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                   <Users className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{mockEarnings.length}</div>
+                  <div className="text-2xl font-bold">{totalStats.totalPeople}</div>
                   <p className="text-xs text-muted-foreground">
                     Active commission earners
                   </p>
@@ -116,9 +239,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                   <Calculator className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">
-                    {mockEarnings.reduce((sum, person) => sum + person.properties.length, 0)}
-                  </div>
+                  <div className="text-2xl font-bold">{totalStats.totalProperties}</div>
                   <p className="text-xs text-muted-foreground">
                     Properties processed
                   </p>
@@ -128,11 +249,11 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Commissions</CardTitle>
-                  <User className="h-4 w-4 text-muted-foreground" />
+                  <DollarSign className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    ${mockEarnings.reduce((sum, person) => sum + person.totalEarnings, 0).toLocaleString()}
+                    ${totalStats.totalCommissions.toLocaleString()}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Total paid out
@@ -147,7 +268,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {mockEarnings.map((person) => (
+                  {peopleEarnings.slice(0, 10).map((person) => (
                     <div key={person.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div className="flex items-center space-x-4">
                         <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-green-500 rounded-full flex items-center justify-center">
@@ -155,17 +276,17 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                         </div>
                         <div>
                           <div className="font-medium">
-                            {person.firstName} {person.lastName}
+                            {person.first_name} {person.last_name}
                           </div>
                           <div className="text-sm text-gray-500">@{person.username}</div>
                         </div>
                       </div>
                       <div className="text-right">
                         <div className="font-medium">
-                          ${person.totalEarnings.toLocaleString()}
+                          ${person.total_earnings.toLocaleString()}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {person.properties.length} properties
+                          {person.commission_count} commissions
                         </div>
                       </div>
                     </div>
@@ -203,40 +324,51 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                         <div className="flex justify-between items-start mb-4">
                           <div>
                             <h3 className="font-semibold text-lg">
-                              {person.firstName} {person.lastName}
+                              {person.first_name} {person.last_name}
                             </h3>
                             <p className="text-gray-600">@{person.username}</p>
                             <p className="text-sm text-gray-500">{person.email}</p>
                           </div>
                           <div className="text-right">
                             <div className="text-2xl font-bold text-green-600">
-                              ${person.totalEarnings.toLocaleString()}
+                              ${person.total_earnings.toLocaleString()}
                             </div>
                             <div className="text-sm text-gray-500">Total Earnings</div>
+                            <Button
+                              onClick={() => fetchPersonCommissions(person.id)}
+                              variant="outline"
+                              size="sm"
+                              className="mt-2"
+                            >
+                              View Details
+                            </Button>
                           </div>
                         </div>
 
-                        <div className="space-y-2">
-                          <h4 className="font-medium">Property Commissions:</h4>
-                          {person.properties.map((property) => (
-                            <div key={property.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                              <div>
-                                <span className="font-medium">{property.type}</span>
-                                <span className="text-gray-500 ml-2">
-                                  (${property.price.toLocaleString()})
-                                </span>
-                              </div>
-                              <div className="text-right">
-                                <div className="font-medium">
-                                  ${property.commission.toLocaleString()}
+                        {selectedPersonId === person.id && selectedPersonCommissions.length > 0 && (
+                          <div className="space-y-2 mt-4 border-t pt-4">
+                            <h4 className="font-medium">Commission History:</h4>
+                            {selectedPersonCommissions.map((commission) => (
+                              <div key={commission.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                                <div>
+                                  <span className="font-medium capitalize">{commission.property_type}</span>
+                                  <span className="text-gray-500 ml-2">
+                                    (${commission.property_price.toLocaleString()})
+                                  </span>
+                                  <span className="text-gray-500 ml-2">- {commission.level_name}</span>
                                 </div>
-                                <div className="text-xs text-gray-500">
-                                  {property.date}
+                                <div className="text-right">
+                                  <div className="font-medium">
+                                    ${commission.commission_amount.toLocaleString()}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {new Date(commission.calculated_at).toLocaleDateString()}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))}
-                        </div>
+                            ))}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   ))}
