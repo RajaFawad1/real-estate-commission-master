@@ -11,14 +11,14 @@ interface PeopleManagerProps {
   levelId: string;
   levelName: string;
   people: Person[];
-  onAddPerson: (levelId: string, person: Person) => boolean;
+  onAddPerson: (levelId: string, person: Omit<Person, 'id'>) => boolean;
 }
 
 const PeopleManager = ({ levelId, levelName, people, onAddPerson }: PeopleManagerProps) => {
   const [formData, setFormData] = useState({
     username: '',
-    firstName: '',
-    lastName: '',
+    first_name: '',
+    last_name: '',
     phone: '',
     email: ''
   });
@@ -26,13 +26,16 @@ const PeopleManager = ({ levelId, levelName, people, onAddPerson }: PeopleManage
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.username || !formData.firstName || !formData.lastName || !formData.email) {
+    if (!formData.username || !formData.first_name || !formData.last_name || !formData.email) {
       return;
     }
 
-    const newPerson: Person = {
-      id: Date.now().toString(),
-      ...formData
+    const newPerson: Omit<Person, 'id'> = {
+      username: formData.username,
+      first_name: formData.first_name,
+      last_name: formData.last_name,
+      phone: formData.phone,
+      email: formData.email
     };
 
     const success = onAddPerson(levelId, newPerson);
@@ -40,8 +43,8 @@ const PeopleManager = ({ levelId, levelName, people, onAddPerson }: PeopleManage
     if (success) {
       setFormData({
         username: '',
-        firstName: '',
-        lastName: '',
+        first_name: '',
+        last_name: '',
         phone: '',
         email: ''
       });
@@ -94,8 +97,8 @@ const PeopleManager = ({ levelId, levelName, people, onAddPerson }: PeopleManage
                 id="firstName"
                 type="text"
                 placeholder="First name"
-                value={formData.firstName}
-                onChange={(e) => handleInputChange('firstName', e.target.value)}
+                value={formData.first_name}
+                onChange={(e) => handleInputChange('first_name', e.target.value)}
                 required
               />
             </div>
@@ -105,8 +108,8 @@ const PeopleManager = ({ levelId, levelName, people, onAddPerson }: PeopleManage
                 id="lastName"
                 type="text"
                 placeholder="Last name"
-                value={formData.lastName}
-                onChange={(e) => handleInputChange('lastName', e.target.value)}
+                value={formData.last_name}
+                onChange={(e) => handleInputChange('last_name', e.target.value)}
                 required
               />
             </div>
@@ -141,7 +144,7 @@ const PeopleManager = ({ levelId, levelName, people, onAddPerson }: PeopleManage
                   <div className="flex justify-between items-start">
                     <div>
                       <div className="font-medium text-gray-900">
-                        {person.firstName} {person.lastName}
+                        {person.first_name} {person.last_name}
                       </div>
                       <div className="text-sm text-gray-600">@{person.username}</div>
                       <div className="text-sm text-gray-600">{person.email}</div>

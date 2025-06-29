@@ -34,7 +34,7 @@ const LevelManager = ({ levels, onCommissionUpdate }: LevelManagerProps) => {
                   max="100"
                   step="0.1"
                   placeholder="Enter %"
-                  value={level.commission || ''}
+                  value={level.commission_percentage || ''}
                   onChange={(e) => onCommissionUpdate(level.id, Number(e.target.value))}
                   className="text-center font-medium"
                 />

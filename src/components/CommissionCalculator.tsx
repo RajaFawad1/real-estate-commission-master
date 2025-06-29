@@ -139,13 +139,13 @@ const CommissionCalculator = () => {
     setLoading(true);
 
     try {
-      // Create property record
+      // Create property record with proper type casting
       const { data: property, error: propertyError } = await supabase
         .from('properties')
-        .insert([{
+        .insert({
           price: propertyPrice,
-          property_type: propertyType
-        }])
+          property_type: propertyType as 'residential' | 'commercial' | 'industrial' | 'land' | 'luxury'
+        })
         .select()
         .single();
 
@@ -162,12 +162,12 @@ const CommissionCalculator = () => {
           // Create level record
           const { data: levelRecord, error: levelError } = await supabase
             .from('levels')
-            .insert([{
+            .insert({
               property_id: property.id,
               name: level.name,
               commission_percentage: level.commission_percentage,
               level_order: level.level_order
-            }])
+            })
             .select()
             .single();
 
@@ -185,10 +185,10 @@ const CommissionCalculator = () => {
             // Create level-people association
             await supabase
               .from('level_people')
-              .insert([{
+              .insert({
                 level_id: levelRecord.id,
                 person_id: person.id
-              }]);
+              });
 
             // Create commission record
             const commissionRecord = {
