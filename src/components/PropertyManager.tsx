@@ -13,9 +13,9 @@ import { useToast } from '@/hooks/use-toast';
 
 interface Property {
   id: string;
-  property_name: string;
+  property_name: string | null;
   property_type: string;
-  address: string;
+  address: string | null;
   price: number;
   sold_by: string | null;
   created_at: string;
@@ -78,7 +78,22 @@ const PropertyManager = () => {
           variant: "destructive",
         });
       } else {
-        setProperties(data || []);
+        // Map the data to match our interface
+        const formattedProperties = data?.map(prop => ({
+          id: prop.id,
+          property_name: prop.property_name,
+          property_type: prop.property_type,
+          address: prop.address,
+          price: prop.price,
+          sold_by: prop.sold_by,
+          created_at: prop.created_at,
+          seller: prop.seller ? {
+            first_name: prop.seller.first_name,
+            last_name: prop.seller.last_name,
+            username: prop.seller.username
+          } : undefined
+        })) || [];
+        setProperties(formattedProperties);
       }
     } catch (error) {
       console.error('Error:', error);
@@ -110,7 +125,7 @@ const PropertyManager = () => {
     try {
       const propertyData = {
         property_name: formData.property_name,
-        property_type: formData.property_type,
+        property_type: formData.property_type as any,
         address: formData.address,
         price: parseFloat(formData.price),
         sold_by: formData.sold_by || null
@@ -358,7 +373,7 @@ const PropertyManager = () => {
                     </span>
                   </div>
                   <div className="mt-2 text-sm text-gray-600">
-                    <p>{property.address}</p>
+                    {property.address && <p>{property.address}</p>}
                     {property.seller && (
                       <p className="text-green-600">
                         Sold by: {property.seller.first_name} {property.seller.last_name} (@{property.seller.username})

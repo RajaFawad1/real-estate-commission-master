@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LogOut, Calculator, Users, BarChart3, DollarSign, TrendingUp, Building } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { SidebarProvider, Sidebar, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarTrigger, SidebarHeader } from '@/components/ui/sidebar';
@@ -25,6 +24,8 @@ interface Property {
   id: string;
   price: number;
   property_type: string;
+  property_name?: string;
+  address?: string;
   created_at: string;
   sold_by: string;
   seller?: {
@@ -101,31 +102,16 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
         setRecentProperties(formattedProperties);
       }
 
-      // Fetch all people with referrer information
+      // Fetch all people - simplified query to avoid relationship issues
       const { data: people, error: peopleError } = await supabase
         .from('people')
-        .select(`
-          *,
-          referrer:people!people_referred_by_fkey (
-            first_name,
-            last_name,
-            username
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (peopleError) {
         console.error('Error fetching people:', peopleError);
       } else {
-        const formattedPeople = people?.map(person => ({
-          ...person,
-          referrer: person.referrer ? {
-            first_name: person.referrer.first_name,
-            last_name: person.referrer.last_name,
-            username: person.referrer.username
-          } : undefined
-        })) || [];
-        setAllPeople(formattedPeople);
+        setAllPeople(people || []);
       }
 
       // Fetch commission stats
@@ -196,10 +182,9 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                           </span>
                         </div>
                         <p className="text-sm text-gray-600">{person.email}</p>
-                        {person.referrer && (
+                        {person.referred_by && (
                           <p className="text-sm text-green-600 mt-1">
-                            Invited by: {person.referrer.first_name} {person.referrer.last_name} 
-                            <span className="text-gray-500"> (@{person.referrer.username})</span>
+                            Has a referrer
                           </p>
                         )}
                         {!person.referred_by && (
@@ -234,6 +219,12 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                             {property.property_type}
                           </span>
                         </div>
+                        {property.property_name && (
+                          <p className="text-sm text-gray-600 mt-1">{property.property_name}</p>
+                        )}
+                        {property.address && (
+                          <p className="text-sm text-gray-500 mt-1">{property.address}</p>
+                        )}
                         {property.seller && (
                           <p className="text-sm text-gray-600 mt-1">
                             Sold by: {property.seller.first_name} {property.seller.last_name} 
