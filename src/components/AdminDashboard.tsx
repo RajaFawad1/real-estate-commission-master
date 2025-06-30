@@ -72,7 +72,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
         .from('properties')
         .select(`
           *,
-          people!properties_sold_by_fkey (
+          seller:people!properties_sold_by_fkey (
             first_name,
             last_name,
             username,
@@ -87,11 +87,11 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
       } else {
         const formattedProperties = properties?.map(prop => ({
           ...prop,
-          seller: prop.people ? {
-            first_name: prop.people.first_name,
-            last_name: prop.people.last_name,
-            username: prop.people.username,
-            referral_level: prop.people.referral_level
+          seller: prop.seller ? {
+            first_name: prop.seller.first_name,
+            last_name: prop.seller.last_name,
+            username: prop.seller.username,
+            referral_level: prop.seller.referral_level
           } : undefined
         })) || [];
         setRecentProperties(formattedProperties);
