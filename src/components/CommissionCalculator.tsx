@@ -5,9 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calculator, Users, UserCheck, UserPlus } from 'lucide-react';
+import { Calculator, Users, UserCheck, UserPlus, Settings } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import LevelManager, { Level } from './LevelManager';
 
 export interface Person {
   id: string;
@@ -47,11 +48,12 @@ const CommissionCalculator = () => {
   const [loading, setLoading] = useState(false);
   const [allPeople, setAllPeople] = useState<Person[]>([]);
   const [referralPreview, setReferralPreview] = useState<ReferralCommission[]>([]);
+  const [levels, setLevels] = useState<Level[]>([]);
   const { toast } = useToast();
 
-  // Fetch all people and preview referral commissions when seller is selected
   useEffect(() => {
     fetchAllPeople();
+    fetchReferralLevels();
   }, []);
 
   useEffect(() => {
@@ -60,7 +62,7 @@ const CommissionCalculator = () => {
     } else {
       setReferralPreview([]);
     }
-  }, [selectedSeller, propertyPrice]);
+  }, [selectedSeller, propertyPrice, levels]);
 
   const fetchAllPeople = async () => {
     try {
@@ -80,9 +82,64 @@ const CommissionCalculator = () => {
     }
   };
 
+  const fetchReferralLevels = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('referral_levels')
+        .select('*')
+        .order('level');
+
+      if (error) {
+        console.error('Error fetching referral levels:', error);
+        return;
+      }
+
+      const formattedLevels: Level[] = data?.map(level => ({
+        id: level.id,
+        level: level.level,
+        commission_percentage: level.commission_percentage,
+        name: `Level ${level.level} Referrer`
+      })) || [];
+
+      setLevels(formattedLevels);
+    } catch (error) {
+      console.error('Error fetching referral levels:', error);
+    }
+  };
+
+  const handleCommissionUpdate = async (level: number, commission: number) => {
+    try {
+      const { error } = await supabase
+        .from('referral_levels')
+        .update({ commission_percentage: commission })
+        .eq('level', level);
+
+      if (error) {
+        console.error('Error updating commission:', error);
+        toast({
+          title: "Error",
+          description: "Failed to update commission percentage.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Update local state
+      setLevels(prev => prev.map(l => 
+        l.level === level ? { ...l, commission_percentage: commission } : l
+      ));
+
+      toast({
+        title: "Commission updated",
+        description: `Level ${level} commission set to ${commission}%`,
+      });
+    } catch (error) {
+      console.error('Error updating commission:', error);
+    }
+  };
+
   const calculateUserLevel = async (userId: string): Promise<number> => {
     try {
-      // Recursive function to trace back to root
       const traceToRoot = async (currentUserId: string, depth: number = 1): Promise<number> => {
         const { data: user, error } = await supabase
           .from('people')
@@ -91,17 +148,16 @@ const CommissionCalculator = () => {
           .single();
 
         if (error || !user || !user.referred_by) {
-          return depth; // This is a root user or end of chain
+          return depth;
         }
 
-        // Continue tracing upward
         return await traceToRoot(user.referred_by, depth + 1);
       };
 
       return await traceToRoot(userId);
     } catch (error) {
       console.error('Error calculating user level:', error);
-      return 1; // Default to level 1 if error
+      return 1;
     }
   };
 
@@ -109,7 +165,6 @@ const CommissionCalculator = () => {
     if (!selectedSeller || !propertyPrice) return;
 
     try {
-      // Get referral chain for the seller
       const { data: referralChain, error } = await supabase
         .rpc('get_referral_chain', { seller_id: selectedSeller });
 
@@ -118,22 +173,10 @@ const CommissionCalculator = () => {
         return;
       }
 
-      // Get referral commission percentages
-      const { data: referralLevels, error: levelsError } = await supabase
-        .from('referral_levels')
-        .select('*')
-        .order('level');
-
-      if (levelsError) {
-        console.error('Error fetching referral levels:', levelsError);
-        return;
-      }
-
-      // Calculate commissions for each referrer
       const commissions: ReferralCommission[] = [];
       
       referralChain?.forEach((referrer) => {
-        const levelData = referralLevels?.find(l => l.level === referrer.level - 1);
+        const levelData = levels.find(l => l.level === referrer.level - 1);
         if (levelData) {
           const commissionAmount = (propertyPrice * levelData.commission_percentage) / 100;
           commissions.push({
@@ -156,7 +199,6 @@ const CommissionCalculator = () => {
 
   const handleAddPerson = async (personData: Omit<Person, 'id'>) => {
     try {
-      // Check if username already exists
       const { data: existingPerson } = await supabase
         .from('people')
         .select('username')
@@ -172,13 +214,11 @@ const CommissionCalculator = () => {
         return false;
       }
 
-      // Calculate referral level based on referrer
       let referralLevel = 1;
       if (personData.referred_by) {
         referralLevel = await calculateUserLevel(personData.referred_by) + 1;
       }
 
-      // Insert new person
       const { data: newPerson, error } = await supabase
         .from('people')
         .insert([{
@@ -202,7 +242,6 @@ const CommissionCalculator = () => {
         return false;
       }
 
-      // Update local state
       setAllPeople(prev => [...prev, newPerson]);
       
       toast({
@@ -235,7 +274,6 @@ const CommissionCalculator = () => {
     setLoading(true);
 
     try {
-      // Create property record
       const { data: property, error: propertyError } = await supabase
         .from('properties')
         .insert({
@@ -250,7 +288,6 @@ const CommissionCalculator = () => {
         throw propertyError;
       }
 
-      // Calculate and save referral commissions
       const referralCommissionRecords = [];
       let totalReferralCommissions = 0;
 
@@ -266,7 +303,6 @@ const CommissionCalculator = () => {
         totalReferralCommissions += referralCommission.commission_amount;
       }
 
-      // Insert referral commission records
       if (referralCommissionRecords.length > 0) {
         const { error: referralError } = await supabase
           .from('referral_commissions')
@@ -295,7 +331,6 @@ const CommissionCalculator = () => {
         description: `Total commission: $${totalReferralCommissions.toLocaleString()}`,
       });
 
-      // Reset form
       setPropertyPrice(0);
       setPropertyType('');
       setSelectedSeller('');
@@ -315,6 +350,23 @@ const CommissionCalculator = () => {
 
   return (
     <div className="space-y-6">
+      {/* Commission Level Settings */}
+      <Card className="shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-purple-600 to-blue-600 text-white">
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="w-5 h-5" />
+            Commission Level Settings
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <LevelManager 
+            levels={levels} 
+            onCommissionUpdate={handleCommissionUpdate}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Property Commission Calculator */}
       <Card className="shadow-lg">
         <CardHeader className="bg-gradient-to-r from-blue-600 to-green-600 text-white">
           <CardTitle className="flex items-center gap-2">
@@ -446,6 +498,7 @@ const CommissionCalculator = () => {
         </CardContent>
       </Card>
 
+      {/* Latest Results */}
       {calculations.length > 0 && (
         <Card className="shadow-lg">
           <CardHeader>
