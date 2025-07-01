@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,7 +46,8 @@ interface Level {
 interface CommissionResult {
   level: string;
   percentage: number;
-  amount: number;
+  totalAmount: number;
+  amountPerPerson: number;
   people: Person[];
 }
 
@@ -134,37 +136,38 @@ const CommissionCalculator = () => {
     const results: CommissionResult[] = [];
 
     for (const level of levels) {
+      // Get people at this level
       const levelPeople = people.filter(p => p.referral_level === level.level_order);
-      const commissionAmount = (property.price * level.commission_percentage) / 100;
+      const totalCommissionAmount = (property.price * level.commission_percentage) / 100;
+      const amountPerPerson = levelPeople.length > 0 ? totalCommissionAmount / levelPeople.length : 0;
 
       results.push({
         level: level.name,
         percentage: level.commission_percentage,
-        amount: commissionAmount,
+        totalAmount: totalCommissionAmount,
+        amountPerPerson: amountPerPerson,
         people: levelPeople
       });
-    }
 
-    setCommissionResults(results);
-
-    // Save commission calculations to database
-    for (const result of results) {
-      for (const person of result.people) {
+      // Save commission calculations to database for each person
+      for (const person of levelPeople) {
         try {
           await supabase
             .from('commissions')
             .insert({
               property_id: selectedProperty,
               person_id: person.id,
-              level_id: levels.find(l => l.name === result.level)?.id,
-              commission_percentage: result.percentage,
-              commission_amount: result.amount
+              level_id: level.id,
+              commission_percentage: level.commission_percentage,
+              commission_amount: amountPerPerson
             });
         } catch (error) {
-          console.error('Error saving commission:', error);
+          console.error('Error saving commission for person:', person.username, error);
         }
       }
     }
+
+    setCommissionResults(results);
 
     toast({
       title: "Commissions Calculated",
@@ -250,9 +253,9 @@ const CommissionCalculator = () => {
                 <TableRow>
                   <TableHead>Level</TableHead>
                   <TableHead>Commission %</TableHead>
-                  <TableHead>Commission Amount</TableHead>
-                  <TableHead>People Count</TableHead>
-                  <TableHead>People</TableHead>
+                  <TableHead>Total Amount</TableHead>
+                  <TableHead>Amount Per Person</TableHead>
+                  <TableHead>People Details</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -260,19 +263,28 @@ const CommissionCalculator = () => {
                   <TableRow key={index}>
                     <TableCell className="font-medium">{result.level}</TableCell>
                     <TableCell>{result.percentage}%</TableCell>
-                    <TableCell>${result.amount.toLocaleString()}</TableCell>
-                    <TableCell>{result.people.length}</TableCell>
+                    <TableCell>${result.totalAmount.toLocaleString()}</TableCell>
+                    <TableCell className="font-medium text-green-600">
+                      ${result.amountPerPerson.toLocaleString()}
+                    </TableCell>
                     <TableCell>
                       {result.people.length > 0 ? (
-                        <div className="space-y-1">
+                        <div className="space-y-2">
                           {result.people.map(person => (
-                            <div key={person.id} className="text-sm">
-                              {person.first_name} {person.last_name} (@{person.username})
+                            <div key={person.id} className="p-2 bg-blue-50 rounded border-l-4 border-blue-400">
+                              <div className="font-medium text-blue-900">
+                                {person.first_name} {person.last_name}
+                              </div>
+                              <div className="text-sm text-blue-700">@{person.username}</div>
+                              <div className="text-sm text-blue-700">{person.email}</div>
+                              <div className="text-sm font-medium text-green-700">
+                                Commission: ${result.amountPerPerson.toLocaleString()}
+                              </div>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <span className="text-gray-500">No people assigned</span>
+                        <span className="text-gray-500">No people assigned to this level</span>
                       )}
                     </TableCell>
                   </TableRow>

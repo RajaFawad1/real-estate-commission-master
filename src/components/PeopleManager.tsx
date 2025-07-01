@@ -35,7 +35,11 @@ const PeopleManager = ({ levelId, levelName, people, onAddPerson }: PeopleManage
       first_name: formData.first_name,
       last_name: formData.last_name,
       phone: formData.phone,
-      email: formData.email
+      email: formData.email,
+      referred_by: null,
+      referral_level: null,
+      created_at: null,
+      updated_at: null
     };
 
     const success = onAddPerson(levelId, newPerson);

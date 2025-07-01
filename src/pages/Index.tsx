@@ -27,10 +27,6 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -47,7 +43,7 @@ const Index = () => {
       {!user ? (
         <LoginForm />
       ) : (
-        <AdminDashboard onLogout={handleLogout} />
+        <AdminDashboard />
       )}
     </div>
   );

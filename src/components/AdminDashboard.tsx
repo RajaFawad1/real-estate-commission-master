@@ -10,6 +10,7 @@ import PropertyManager from './PropertyManager';
 import PersonManager from './PersonManager';
 import CommissionCalculator from './CommissionCalculator';
 import LevelManager from './LevelManager';
+import { useToast } from '@/hooks/use-toast';
 
 interface Property {
   id: string;
@@ -36,11 +37,20 @@ interface Person {
   updated_at: string | null;
 }
 
+interface Level {
+  id: string;
+  level: number;
+  commission_percentage: number;
+  name: string;
+}
+
 const AdminDashboard = () => {
   const [properties, setProperties] = useState<Property[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
+  const [levels, setLevels] = useState<Level[]>([]);
   const [commissions, setCommissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchDashboardData();
@@ -73,6 +83,25 @@ const AdminDashboard = () => {
         setPeople(peopleData || []);
       }
 
+      // Fetch levels
+      const { data: levelsData, error: levelsError } = await supabase
+        .from('levels')
+        .select('*')
+        .order('level_order', { ascending: true });
+
+      if (levelsError) {
+        console.error('Error fetching levels:', levelsError);
+      } else {
+        // Map the database structure to the component interface
+        const mappedLevels = levelsData?.map(level => ({
+          id: level.id,
+          level: level.level_order,
+          commission_percentage: level.commission_percentage,
+          name: level.name
+        })) || [];
+        setLevels(mappedLevels);
+      }
+
       // Fetch commissions
       const { data: commissionsData, error: commissionsError } = await supabase
         .from('commissions')
@@ -89,6 +118,37 @@ const AdminDashboard = () => {
       console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCommissionUpdate = async (level: number, commission: number) => {
+    try {
+      const { error } = await supabase
+        .from('levels')
+        .update({ commission_percentage: commission })
+        .eq('level_order', level);
+
+      if (error) {
+        console.error('Error updating commission:', error);
+        toast({
+          title: "Error",
+          description: "Failed to update commission percentage.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Commission percentage updated successfully.",
+        });
+        fetchDashboardData(); // Refresh data
+      }
+    } catch (error) {
+      console.error('Error updating commission:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update commission percentage.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -252,7 +312,7 @@ const AdminDashboard = () => {
         </TabsContent>
 
         <TabsContent value="levels">
-          <LevelManager />
+          <LevelManager levels={levels} onCommissionUpdate={handleCommissionUpdate} />
         </TabsContent>
 
         <TabsContent value="calculator">
