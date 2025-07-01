@@ -75,7 +75,7 @@ const PropertyManager = () => {
           .update({
             property_name: formData.property_name,
             price: formData.price,
-            property_type: formData.property_type,
+            property_type: formData.property_type as "residential" | "commercial" | "industrial" | "land" | "luxury",
             address: formData.address
           })
           .eq('id', editingId);
@@ -92,7 +92,7 @@ const PropertyManager = () => {
           .insert([{
             property_name: formData.property_name,
             price: formData.price,
-            property_type: formData.property_type,
+            property_type: formData.property_type as "residential" | "commercial" | "industrial" | "land" | "luxury",
             address: formData.address
           }]);
 
@@ -206,7 +206,7 @@ const PropertyManager = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="property_type">Property Type</Label>
-                <Select onValueChange={(value) => setFormData(prev => ({ ...prev, property_type: value }))}>
+                <Select value={formData.property_type} onValueChange={(value) => setFormData(prev => ({ ...prev, property_type: value }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select property type" />
                   </SelectTrigger>
