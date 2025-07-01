@@ -1,11 +1,12 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, Calculator, Users, BarChart3, DollarSign, TrendingUp, Building } from 'lucide-react';
+import { LogOut, Calculator, Users, BarChart3, DollarSign, TrendingUp, Building, UserPlus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import CommissionCalculator from './CommissionCalculator';
+import PropertyManager from './PropertyManager';
+import PersonManager from './PersonManager';
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -20,8 +21,10 @@ interface DashboardStats {
 
 interface Property {
   id: string;
+  property_name: string;
   price: number;
   property_type: string;
+  address: string;
   created_at: string;
   sold_by: string;
   seller?: {
@@ -226,10 +229,11 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
 
         {/* Main Content Tabs */}
         <Tabs defaultValue="calculator" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="calculator">Calculator</TabsTrigger>
             <TabsTrigger value="properties">Properties</TabsTrigger>
-            <TabsTrigger value="people">People</TabsTrigger>
+            <TabsTrigger value="add-property">Add Property</TabsTrigger>
+            <TabsTrigger value="add-person">Add Person</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
 
@@ -252,11 +256,13 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="flex items-center space-x-2">
+                            <span className="font-semibold text-lg">{property.property_name}</span>
                             <span className="font-semibold text-lg">€{property.price.toLocaleString()}</span>
                             <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
                               {property.property_type}
                             </span>
                           </div>
+                          <p className="text-sm text-gray-600 mt-1">{property.address}</p>
                           {property.seller && (
                             <p className="text-sm text-gray-600 mt-1">
                               Sold by: {property.seller.first_name} {property.seller.last_name} 
@@ -278,44 +284,12 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="people">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="w-5 h-5" />
-                  People Network ({allPeople.length} total)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4 max-h-96 overflow-y-auto">
-                  {allPeople.map((person) => (
-                    <div key={person.id} className="p-4 border rounded-lg hover:bg-gray-50">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="font-semibold">{person.first_name} {person.last_name}</span>
-                            <span className="text-gray-500">@{person.username}</span>
-                            <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                              Level {person.referral_level || 1}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600">{person.email}</p>
-                          {person.referrer && (
-                            <p className="text-sm text-green-600 mt-1">
-                              Invited by: {person.referrer.first_name} {person.referrer.last_name} 
-                              <span className="text-gray-500"> (@{person.referrer.username})</span>
-                            </p>
-                          )}
-                          {!person.referred_by && (
-                            <p className="text-sm text-blue-600 mt-1">🌟 Root User (Level 1)</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+          <TabsContent value="add-property">
+            <PropertyManager />
+          </TabsContent>
+
+          <TabsContent value="add-person">
+            <PersonManager />
           </TabsContent>
 
           <TabsContent value="analytics">

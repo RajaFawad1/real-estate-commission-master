@@ -1,11 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calculator, Users, UserCheck, UserPlus, Settings } from 'lucide-react';
+import { Calculator, UserCheck, Settings } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import LevelManager, { Level } from './LevelManager';
@@ -23,11 +21,11 @@ export interface Person {
 
 export interface Property {
   id: string;
+  property_name: string;
   price: number;
   property_type: string;
-  totalCommission: number;
+  address: string;
   created_at: Date;
-  sold_by?: string;
 }
 
 interface ReferralCommission {
@@ -41,28 +39,29 @@ interface ReferralCommission {
 }
 
 const CommissionCalculator = () => {
-  const [propertyPrice, setPropertyPrice] = useState<number>(0);
-  const [propertyType, setPropertyType] = useState<string>('');
+  const [selectedProperty, setSelectedProperty] = useState<string>('');
   const [selectedSeller, setSelectedSeller] = useState<string>('');
   const [calculations, setCalculations] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [allPeople, setAllPeople] = useState<Person[]>([]);
+  const [allProperties, setAllProperties] = useState<Property[]>([]);
   const [referralPreview, setReferralPreview] = useState<ReferralCommission[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchAllPeople();
+    fetchAllProperties();
     fetchReferralLevels();
   }, []);
 
   useEffect(() => {
-    if (selectedSeller && propertyPrice > 0) {
+    if (selectedSeller && selectedProperty) {
       previewReferralCommissions();
     } else {
       setReferralPreview([]);
     }
-  }, [selectedSeller, propertyPrice, levels]);
+  }, [selectedSeller, selectedProperty, levels]);
 
   const fetchAllPeople = async () => {
     try {
@@ -79,6 +78,24 @@ const CommissionCalculator = () => {
       setAllPeople(data || []);
     } catch (error) {
       console.error('Error fetching people:', error);
+    }
+  };
+
+  const fetchAllProperties = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('properties')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching properties:', error);
+        return;
+      }
+
+      setAllProperties(data || []);
+    } catch (error) {
+      console.error('Error fetching properties:', error);
     }
   };
 
@@ -124,7 +141,6 @@ const CommissionCalculator = () => {
         return;
       }
 
-      // Update local state
       setLevels(prev => prev.map(l => 
         l.level === level ? { ...l, commission_percentage: commission } : l
       ));
@@ -138,31 +154,11 @@ const CommissionCalculator = () => {
     }
   };
 
-  const calculateUserLevel = async (userId: string): Promise<number> => {
-    try {
-      const traceToRoot = async (currentUserId: string, depth: number = 1): Promise<number> => {
-        const { data: user, error } = await supabase
-          .from('people')
-          .select('referred_by')
-          .eq('id', currentUserId)
-          .single();
-
-        if (error || !user || !user.referred_by) {
-          return depth;
-        }
-
-        return await traceToRoot(user.referred_by, depth + 1);
-      };
-
-      return await traceToRoot(userId);
-    } catch (error) {
-      console.error('Error calculating user level:', error);
-      return 1;
-    }
-  };
-
   const previewReferralCommissions = async () => {
-    if (!selectedSeller || !propertyPrice) return;
+    if (!selectedSeller || !selectedProperty) return;
+
+    const selectedPropertyData = allProperties.find(p => p.id === selectedProperty);
+    if (!selectedPropertyData) return;
 
     try {
       const { data: referralChain, error } = await supabase
@@ -178,7 +174,7 @@ const CommissionCalculator = () => {
       referralChain?.forEach((referrer) => {
         const levelData = levels.find(l => l.level === referrer.level - 1);
         if (levelData) {
-          const commissionAmount = (propertyPrice * levelData.commission_percentage) / 100;
+          const commissionAmount = (selectedPropertyData.price * levelData.commission_percentage) / 100;
           commissions.push({
             person_id: referrer.person_id,
             username: referrer.username,
@@ -197,103 +193,28 @@ const CommissionCalculator = () => {
     }
   };
 
-  const handleAddPerson = async (personData: Omit<Person, 'id'>) => {
-    try {
-      const { data: existingPerson } = await supabase
-        .from('people')
-        .select('username')
-        .eq('username', personData.username)
-        .single();
-
-      if (existingPerson) {
-        toast({
-          title: "Username already exists",
-          description: "Please choose a different username.",
-          variant: "destructive",
-        });
-        return false;
-      }
-
-      let referralLevel = 1;
-      if (personData.referred_by) {
-        referralLevel = await calculateUserLevel(personData.referred_by) + 1;
-      }
-
-      const { data: newPerson, error } = await supabase
-        .from('people')
-        .insert([{
-          username: personData.username,
-          first_name: personData.first_name,
-          last_name: personData.last_name,
-          phone: personData.phone || '',
-          email: personData.email,
-          referred_by: personData.referred_by || null,
-          referral_level: referralLevel
-        }])
-        .select()
-        .single();
-
-      if (error) {
-        toast({
-          title: "Error adding person",
-          description: error.message,
-          variant: "destructive",
-        });
-        return false;
-      }
-
-      setAllPeople(prev => [...prev, newPerson]);
-      
-      toast({
-        title: "Person added successfully",
-        description: `${personData.first_name} ${personData.last_name} has been added at Level ${referralLevel}.`,
-      });
-      
-      return true;
-    } catch (error) {
-      console.error('Error adding person:', error);
-      toast({
-        title: "Error",
-        description: "Failed to add person. Please try again.",
-        variant: "destructive",
-      });
-      return false;
-    }
-  };
-
   const calculateCommissions = async () => {
-    if (!propertyPrice || !propertyType || !selectedSeller) {
+    if (!selectedProperty || !selectedSeller) {
       toast({
         title: "Missing information",
-        description: "Please enter property price, type, and select a seller.",
+        description: "Please select both property and seller.",
         variant: "destructive",
       });
       return;
     }
 
+    const selectedPropertyData = allProperties.find(p => p.id === selectedProperty);
+    if (!selectedPropertyData) return;
+
     setLoading(true);
 
     try {
-      const { data: property, error: propertyError } = await supabase
-        .from('properties')
-        .insert({
-          price: propertyPrice,
-          property_type: propertyType as 'residential' | 'commercial' | 'industrial' | 'land',
-          sold_by: selectedSeller
-        })
-        .select()
-        .single();
-
-      if (propertyError) {
-        throw propertyError;
-      }
-
       const referralCommissionRecords = [];
       let totalReferralCommissions = 0;
 
       for (const referralCommission of referralPreview) {
         const commissionRecord = {
-          property_id: property.id,
+          property_id: selectedProperty,
           referrer_id: referralCommission.person_id,
           referral_level: referralCommission.level,
           commission_percentage: referralCommission.commission_percentage,
@@ -314,9 +235,8 @@ const CommissionCalculator = () => {
       }
 
       const newCalculation = {
-        id: property.id,
-        propertyPrice,
-        propertyType,
+        id: selectedProperty,
+        property: selectedPropertyData,
         seller: allPeople.find(p => p.id === selectedSeller),
         totalCommission: totalReferralCommissions,
         referralResults: referralPreview,
@@ -331,8 +251,7 @@ const CommissionCalculator = () => {
         description: `Total commission: €${totalReferralCommissions.toLocaleString()}`,
       });
 
-      setPropertyPrice(0);
-      setPropertyType('');
+      setSelectedProperty('');
       setSelectedSeller('');
       setReferralPreview([]);
 
@@ -347,6 +266,8 @@ const CommissionCalculator = () => {
       setLoading(false);
     }
   };
+
+  const selectedPropertyData = allProperties.find(p => p.id === selectedProperty);
 
   return (
     <div className="space-y-6">
@@ -375,34 +296,24 @@ const CommissionCalculator = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <Label htmlFor="price" className="text-sm font-medium">Property Price (€)</Label>
-              <Input
-                id="price"
-                type="number"
-                placeholder="Enter property price"
-                value={propertyPrice || ''}
-                onChange={(e) => setPropertyPrice(Number(e.target.value))}
-                className="text-lg"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="type" className="text-sm font-medium">Property Type</Label>
-              <Select onValueChange={setPropertyType}>
+              <label className="text-sm font-medium">Select Property</label>
+              <Select onValueChange={setSelectedProperty}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select property type" />
+                  <SelectValue placeholder="Select a property" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="residential">Residential</SelectItem>
-                  <SelectItem value="commercial">Commercial</SelectItem>
-                  <SelectItem value="industrial">Industrial</SelectItem>
-                  <SelectItem value="land">Land</SelectItem>
+                  {allProperties.map(property => (
+                    <SelectItem key={property.id} value={property.id}>
+                      {property.property_name} - €{property.price.toLocaleString()} ({property.property_type})
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="seller" className="text-sm font-medium">Seller</Label>
+              <label className="text-sm font-medium">Select Seller</label>
               <Select onValueChange={setSelectedSeller}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select seller" />
@@ -417,6 +328,29 @@ const CommissionCalculator = () => {
               </Select>
             </div>
           </div>
+
+          {/* Selected Property Details */}
+          {selectedPropertyData && (
+            <Card className="bg-blue-50 border-blue-200">
+              <CardContent className="p-4">
+                <h4 className="font-semibold text-blue-800 mb-2">Selected Property Details</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium">Name:</span> {selectedPropertyData.property_name}
+                  </div>
+                  <div>
+                    <span className="font-medium">Price:</span> €{selectedPropertyData.price.toLocaleString()}
+                  </div>
+                  <div>
+                    <span className="font-medium">Type:</span> {selectedPropertyData.property_type}
+                  </div>
+                  <div>
+                    <span className="font-medium">Address:</span> {selectedPropertyData.address}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Referral Commission Preview */}
           {referralPreview.length > 0 && (
@@ -458,22 +392,6 @@ const CommissionCalculator = () => {
             </Card>
           )}
 
-          {/* Add New Person Section */}
-          <Card className="shadow-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <UserPlus className="w-5 h-5" />
-                Add New Person
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <PeopleManager
-                allPeople={allPeople}
-                onAddPerson={handleAddPerson}
-              />
-            </CardContent>
-          </Card>
-
           <div className="pt-6 border-t">
             <Button 
               onClick={calculateCommissions}
@@ -505,6 +423,18 @@ const CommissionCalculator = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+              {calculations[0].property && (
+                <div className="p-4 bg-purple-50 rounded-lg border-l-4 border-purple-500">
+                  <h4 className="font-semibold text-purple-800 mb-2">Property Details</h4>
+                  <div className="text-sm">
+                    <div><span className="font-medium">Name:</span> {calculations[0].property.property_name}</div>
+                    <div><span className="font-medium">Price:</span> €{calculations[0].property.price.toLocaleString()}</div>
+                    <div><span className="font-medium">Type:</span> {calculations[0].property.property_type}</div>
+                    <div><span className="font-medium">Address:</span> {calculations[0].property.address}</div>
+                  </div>
+                </div>
+              )}
+
               {calculations[0].seller && (
                 <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
                   <h4 className="font-semibold text-blue-800 mb-2">Property Seller</h4>
@@ -537,133 +467,6 @@ const CommissionCalculator = () => {
         </Card>
       )}
     </div>
-  );
-};
-
-// PeopleManager component for adding new users
-const PeopleManager = ({ allPeople, onAddPerson }: {
-  allPeople: Person[];
-  onAddPerson: (person: Omit<Person, 'id'>) => Promise<boolean>;
-}) => {
-  const [formData, setFormData] = useState({
-    username: '',
-    first_name: '',
-    last_name: '',
-    phone: '',
-    email: '',
-    referred_by: ''
-  });
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!formData.username || !formData.first_name || !formData.last_name || !formData.email) {
-      return;
-    }
-
-    const success = await onAddPerson(formData);
-    
-    if (success) {
-      setFormData({
-        username: '',
-        first_name: '',
-        last_name: '',
-        phone: '',
-        email: '',
-        referred_by: ''
-      });
-    }
-  };
-
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="username" className="text-sm font-medium">Username *</Label>
-          <Input
-            id="username"
-            type="text"
-            placeholder="Unique username"
-            value={formData.username}
-            onChange={(e) => handleInputChange('username', e.target.value)}
-            required
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="email" className="text-sm font-medium">Email *</Label>
-          <Input
-            id="email"
-            type="email"
-            placeholder="Email address"
-            value={formData.email}
-            onChange={(e) => handleInputChange('email', e.target.value)}
-            required
-          />
-        </div>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="firstName" className="text-sm font-medium">First Name *</Label>
-          <Input
-            id="firstName"
-            type="text"
-            placeholder="First name"
-            value={formData.first_name}
-            onChange={(e) => handleInputChange('first_name', e.target.value)}
-            required
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="lastName" className="text-sm font-medium">Last Name *</Label>
-          <Input
-            id="lastName"
-            type="text"
-            placeholder="Last name"
-            value={formData.last_name}
-            onChange={(e) => handleInputChange('last_name', e.target.value)}
-            required
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="phone" className="text-sm font-medium">Phone Number</Label>
-          <Input
-            id="phone"
-            type="tel"
-            placeholder="Phone number"
-            value={formData.phone}
-            onChange={(e) => handleInputChange('phone', e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="referredBy" className="text-sm font-medium">Invited By (Optional)</Label>
-          <Select onValueChange={(value) => handleInputChange('referred_by', value)}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select who invited this person" />
-            </SelectTrigger>
-            <SelectContent>
-              {allPeople.map(person => (
-                <SelectItem key={person.id} value={person.id}>
-                  {person.first_name} {person.last_name} (@{person.username}) - Level {person.referral_level || 1}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
-        <UserPlus className="w-4 h-4 mr-2" />
-        Add Person (Level will be auto-calculated)
-      </Button>
-    </form>
   );
 };
 
