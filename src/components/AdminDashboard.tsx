@@ -87,12 +87,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
       } else {
         const formattedProperties = properties?.map(prop => ({
           ...prop,
-          seller: prop.seller ? {
-            first_name: prop.seller.first_name,
-            last_name: prop.seller.last_name,
-            username: prop.seller.username,
-            referral_level: prop.seller.referral_level
-          } : undefined
+          seller: Array.isArray(prop.seller) ? prop.seller[0] : prop.seller
         })) || [];
         setRecentProperties(formattedProperties);
       }
@@ -115,11 +110,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
       } else {
         const formattedPeople = people?.map(person => ({
           ...person,
-          referrer: person.referrer ? {
-            first_name: person.referrer.first_name,
-            last_name: person.referrer.last_name,
-            username: person.referrer.username
-          } : undefined
+          referrer: Array.isArray(person.referrer) ? person.referrer[0] : person.referrer
         })) || [];
         setAllPeople(formattedPeople);
       }
@@ -213,7 +204,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Level Commissions</p>
-                  <p className="text-3xl font-bold text-gray-900">${stats.totalCommissions.toLocaleString()}</p>
+                  <p className="text-3xl font-bold text-gray-900">€{stats.totalCommissions.toLocaleString()}</p>
                 </div>
                 <DollarSign className="w-8 h-8 text-yellow-600" />
               </div>
@@ -225,7 +216,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Referral Commissions</p>
-                  <p className="text-3xl font-bold text-gray-900">${stats.totalReferralCommissions.toLocaleString()}</p>
+                  <p className="text-3xl font-bold text-gray-900">€{stats.totalReferralCommissions.toLocaleString()}</p>
                 </div>
                 <TrendingUp className="w-8 h-8 text-purple-600" />
               </div>
@@ -261,7 +252,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="flex items-center space-x-2">
-                            <span className="font-semibold text-lg">${property.price.toLocaleString()}</span>
+                            <span className="font-semibold text-lg">€{property.price.toLocaleString()}</span>
                             <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
                               {property.property_type}
                             </span>
@@ -340,16 +331,16 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                   <div className="space-y-4">
                     <div className="flex justify-between items-center p-3 bg-yellow-50 rounded-lg">
                       <span className="font-medium">Level-based Commissions</span>
-                      <span className="font-bold text-yellow-700">${stats.totalCommissions.toLocaleString()}</span>
+                      <span className="font-bold text-yellow-700">€{stats.totalCommissions.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between items-center p-3 bg-purple-50 rounded-lg">
                       <span className="font-medium">Referral Commissions</span>
-                      <span className="font-bold text-purple-700">${stats.totalReferralCommissions.toLocaleString()}</span>
+                      <span className="font-bold text-purple-700">€{stats.totalReferralCommissions.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg border-2 border-green-200">
                       <span className="font-semibold">Total Commissions</span>
                       <span className="font-bold text-green-700 text-lg">
-                        ${(stats.totalCommissions + stats.totalReferralCommissions).toLocaleString()}
+                        €{(stats.totalCommissions + stats.totalReferralCommissions).toLocaleString()}
                       </span>
                     </div>
                   </div>

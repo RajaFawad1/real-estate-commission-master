@@ -278,7 +278,7 @@ const CommissionCalculator = () => {
         .from('properties')
         .insert({
           price: propertyPrice,
-          property_type: propertyType as 'residential' | 'commercial' | 'industrial' | 'land' | 'luxury',
+          property_type: propertyType as 'residential' | 'commercial' | 'industrial' | 'land',
           sold_by: selectedSeller
         })
         .select()
@@ -328,7 +328,7 @@ const CommissionCalculator = () => {
 
       toast({
         title: "Commission calculated successfully",
-        description: `Total commission: $${totalReferralCommissions.toLocaleString()}`,
+        description: `Total commission: €${totalReferralCommissions.toLocaleString()}`,
       });
 
       setPropertyPrice(0);
@@ -377,7 +377,7 @@ const CommissionCalculator = () => {
         <CardContent className="p-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-2">
-              <Label htmlFor="price" className="text-sm font-medium">Property Price ($)</Label>
+              <Label htmlFor="price" className="text-sm font-medium">Property Price (€)</Label>
               <Input
                 id="price"
                 type="number"
@@ -398,7 +398,6 @@ const CommissionCalculator = () => {
                   <SelectItem value="commercial">Commercial</SelectItem>
                   <SelectItem value="industrial">Industrial</SelectItem>
                   <SelectItem value="land">Land</SelectItem>
-                  <SelectItem value="luxury">Luxury</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -441,7 +440,7 @@ const CommissionCalculator = () => {
                     </div>
                     <div className="text-right">
                       <div className="font-bold text-green-600">
-                        ${referral.commission_amount.toLocaleString()}
+                        €{referral.commission_amount.toLocaleString()}
                       </div>
                       <div className="text-xs text-gray-500">
                         {referral.commission_percentage}%
@@ -452,7 +451,7 @@ const CommissionCalculator = () => {
                 <div className="pt-2 border-t border-green-200">
                   <div className="flex justify-between items-center font-semibold text-green-800">
                     <span>Total Referral Commissions:</span>
-                    <span>${referralPreview.reduce((sum, r) => sum + r.commission_amount, 0).toLocaleString()}</span>
+                    <span>€{referralPreview.reduce((sum, r) => sum + r.commission_amount, 0).toLocaleString()}</span>
                   </div>
                 </div>
               </CardContent>
@@ -523,13 +522,13 @@ const CommissionCalculator = () => {
                     {calculations[0].referralResults.map((referral: ReferralCommission) => (
                       <div key={referral.person_id} className="flex justify-between items-center text-sm bg-white p-2 rounded">
                         <span>{referral.first_name} {referral.last_name} (Level {referral.level})</span>
-                        <span className="font-medium">${referral.commission_amount.toLocaleString()}</span>
+                        <span className="font-medium">€{referral.commission_amount.toLocaleString()}</span>
                       </div>
                     ))}
                   </div>
                   <div className="mt-3 pt-2 border-t border-green-200 flex justify-between font-medium text-green-800">
                     <span>Total Commission:</span>
-                    <span>${calculations[0].totalReferralCommissions.toLocaleString()}</span>
+                    <span>€{calculations[0].totalReferralCommissions.toLocaleString()}</span>
                   </div>
                 </div>
               )}
