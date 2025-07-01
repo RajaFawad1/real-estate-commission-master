@@ -3,37 +3,24 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, Calculator, Users, BarChart3, DollarSign, TrendingUp, Building, UserPlus } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { DollarSign, Users, Home, Calculator, TrendingUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import CommissionCalculator from './CommissionCalculator';
 import PropertyManager from './PropertyManager';
 import PersonManager from './PersonManager';
-
-interface AdminDashboardProps {
-  onLogout: () => void;
-}
-
-interface DashboardStats {
-  totalProperties: number;
-  totalCommissions: number;
-  totalPeople: number;
-  totalReferralCommissions: number;
-}
+import CommissionCalculator from './CommissionCalculator';
+import LevelManager from './LevelManager';
 
 interface Property {
   id: string;
   property_name: string;
   price: number;
-  property_type: string;
+  property_type: 'residential' | 'commercial' | 'industrial' | 'land' | 'luxury';
   address: string;
-  created_at: string;
-  sold_by: string;
-  seller?: {
-    first_name: string;
-    last_name: string;
-    username: string;
-    referral_level: number;
-  };
+  created_at: string | null;
+  created_by: string | null;
+  sold_by: string | null;
+  updated_at: string | null;
 }
 
 interface Person {
@@ -42,25 +29,17 @@ interface Person {
   first_name: string;
   last_name: string;
   email: string;
-  phone: string;
-  referral_level: number;
+  phone: string | null;
+  referral_level: number | null;
   referred_by: string | null;
-  referrer?: {
-    first_name: string;
-    last_name: string;
-    username: string;
-  };
+  created_at: string | null;
+  updated_at: string | null;
 }
 
-const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
-  const [stats, setStats] = useState<DashboardStats>({
-    totalProperties: 0,
-    totalCommissions: 0,
-    totalPeople: 0,
-    totalReferralCommissions: 0
-  });
-  const [recentProperties, setRecentProperties] = useState<Property[]>([]);
-  const [allPeople, setAllPeople] = useState<Person[]>([]);
+const AdminDashboard = () => {
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [people, setPeople] = useState<Person[]>([]);
+  const [commissions, setCommissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -68,76 +47,43 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
   }, []);
 
   const fetchDashboardData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-
-      // Fetch properties with seller information
-      const { data: properties, error: propertiesError } = await supabase
+      // Fetch properties
+      const { data: propertiesData, error: propertiesError } = await supabase
         .from('properties')
-        .select(`
-          *,
-          seller:people!properties_sold_by_fkey (
-            first_name,
-            last_name,
-            username,
-            referral_level
-          )
-        `)
-        .order('created_at', { ascending: false })
-        .limit(5);
+        .select('*')
+        .order('created_at', { ascending: false });
 
       if (propertiesError) {
         console.error('Error fetching properties:', propertiesError);
       } else {
-        const formattedProperties = properties?.map(prop => ({
-          ...prop,
-          seller: Array.isArray(prop.seller) ? prop.seller[0] : prop.seller
-        })) || [];
-        setRecentProperties(formattedProperties);
+        setProperties(propertiesData || []);
       }
 
-      // Fetch all people with referrer information
-      const { data: people, error: peopleError } = await supabase
+      // Fetch people
+      const { data: peopleData, error: peopleError } = await supabase
         .from('people')
-        .select(`
-          *,
-          referrer:people!people_referred_by_fkey (
-            first_name,
-            last_name,
-            username
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (peopleError) {
         console.error('Error fetching people:', peopleError);
       } else {
-        const formattedPeople = people?.map(person => ({
-          ...person,
-          referrer: Array.isArray(person.referrer) ? person.referrer[0] : person.referrer
-        })) || [];
-        setAllPeople(formattedPeople);
+        setPeople(peopleData || []);
       }
 
-      // Fetch commission stats
-      const { data: commissions, error: commissionsError } = await supabase
+      // Fetch commissions
+      const { data: commissionsData, error: commissionsError } = await supabase
         .from('commissions')
-        .select('commission_amount');
+        .select('*')
+        .order('calculated_at', { ascending: false });
 
-      const { data: referralCommissions, error: referralCommissionsError } = await supabase
-        .from('referral_commissions')
-        .select('commission_amount');
-
-      // Calculate stats
-      const totalCommissions = commissions?.reduce((sum, c) => sum + (c.commission_amount || 0), 0) || 0;
-      const totalReferralCommissions = referralCommissions?.reduce((sum, c) => sum + (c.commission_amount || 0), 0) || 0;
-
-      setStats({
-        totalProperties: properties?.length || 0,
-        totalCommissions,
-        totalPeople: people?.length || 0,
-        totalReferralCommissions
-      });
+      if (commissionsError) {
+        console.error('Error fetching commissions:', commissionsError);
+      } else {
+        setCommissions(commissionsData || []);
+      }
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -146,221 +92,173 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     }
   };
 
+  // Calculate statistics
+  const totalProperties = properties.length;
+  const totalPeople = people.length;
+  const totalCommissions = commissions.reduce((sum, comm) => sum + (comm.commission_amount || 0), 0);
+  const totalPropertyValue = properties.reduce((sum, prop) => sum + (prop.price || 0), 0);
+
+  // Prepare chart data
+  const propertyTypeData = properties.reduce((acc, property) => {
+    const type = property.property_type;
+    acc[type] = (acc[type] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const chartData = Object.entries(propertyTypeData).map(([type, count]) => ({
+    name: type.charAt(0).toUpperCase() + type.slice(1),
+    value: count,
+  }));
+
+  const levelData = people.reduce((acc, person) => {
+    const level = person.referral_level || 1;
+    acc[level] = (acc[level] || 0) + 1;
+    return acc;
+  }, {} as Record<number, number>);
+
+  const levelChartData = Object.entries(levelData).map(([level, count]) => ({
+    level: `Level ${level}`,
+    people: count,
+  }));
+
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading dashboard...</p>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <Calculator className="w-8 h-8 text-blue-600" />
-                <h1 className="text-2xl font-bold text-gray-900">Commission Dashboard</h1>
-              </div>
-            </div>
-            <Button onClick={onLogout} variant="outline" className="flex items-center space-x-2">
-              <LogOut className="w-4 h-4" />
-              <span>Logout</span>
-            </Button>
-          </div>
-        </div>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+        <Button onClick={fetchDashboardData} variant="outline">
+          Refresh Data
+        </Button>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total Properties</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.totalProperties}</p>
-                </div>
-                <Building className="w-8 h-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Properties</CardTitle>
+            <Home className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalProperties}</div>
+            <p className="text-xs text-muted-foreground">Properties in system</p>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total People</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.totalPeople}</p>
-                </div>
-                <Users className="w-8 h-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total People</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalPeople}</div>
+            <p className="text-xs text-muted-foreground">People in network</p>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Level Commissions</p>
-                  <p className="text-3xl font-bold text-gray-900">€{stats.totalCommissions.toLocaleString()}</p>
-                </div>
-                <DollarSign className="w-8 h-8 text-yellow-600" />
-              </div>
-            </CardContent>
-          </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Property Value</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${totalPropertyValue.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Combined property value</p>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Referral Commissions</p>
-                  <p className="text-3xl font-bold text-gray-900">€{stats.totalReferralCommissions.toLocaleString()}</p>
-                </div>
-                <TrendingUp className="w-8 h-8 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Commissions</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${totalCommissions.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Commissions calculated</p>
+          </CardContent>
+        </Card>
+      </div>
 
-        {/* Main Content Tabs */}
-        <Tabs defaultValue="calculator" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="calculator">Calculator</TabsTrigger>
-            <TabsTrigger value="properties">Properties</TabsTrigger>
-            <TabsTrigger value="add-property">Add Property</TabsTrigger>
-            <TabsTrigger value="add-person">Add Person</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="calculator">
-            <CommissionCalculator />
-          </TabsContent>
-
-          <TabsContent value="properties">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building className="w-5 h-5" />
-                  Recent Properties
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {recentProperties.map((property) => (
-                    <div key={property.id} className="p-4 border rounded-lg hover:bg-gray-50">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="font-semibold text-lg">{property.property_name}</span>
-                            <span className="font-semibold text-lg">€{property.price.toLocaleString()}</span>
-                            <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                              {property.property_type}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600 mt-1">{property.address}</p>
-                          {property.seller && (
-                            <p className="text-sm text-gray-600 mt-1">
-                              Sold by: {property.seller.first_name} {property.seller.last_name} 
-                              <span className="text-gray-500"> (@{property.seller.username})</span>
-                              <span className="ml-2 px-1 py-0.5 bg-green-100 text-green-800 text-xs rounded">
-                                Level {property.seller.referral_level}
-                              </span>
-                            </p>
-                          )}
-                        </div>
-                        <div className="text-right text-sm text-gray-500">
-                          {new Date(property.created_at).toLocaleDateString()}
-                        </div>
-                      </div>
-                    </div>
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Property Types Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
 
-          <TabsContent value="add-property">
-            <PropertyManager />
-          </TabsContent>
-
-          <TabsContent value="add-person">
-            <PersonManager />
-          </TabsContent>
-
-          <TabsContent value="analytics">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5" />
-                    Commission Summary
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center p-3 bg-yellow-50 rounded-lg">
-                      <span className="font-medium">Level-based Commissions</span>
-                      <span className="font-bold text-yellow-700">€{stats.totalCommissions.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between items-center p-3 bg-purple-50 rounded-lg">
-                      <span className="font-medium">Referral Commissions</span>
-                      <span className="font-bold text-purple-700">€{stats.totalReferralCommissions.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg border-2 border-green-200">
-                      <span className="font-semibold">Total Commissions</span>
-                      <span className="font-bold text-green-700 text-lg">
-                        €{(stats.totalCommissions + stats.totalReferralCommissions).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5" />
-                    Network Overview
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="text-center">
-                      <div className="text-3xl font-bold text-blue-600">{stats.totalPeople}</div>
-                      <div className="text-sm text-gray-600">Total Network Members</div>
-                    </div>
-                    <div className="space-y-2">
-                      {[1, 2, 3, 4, 5].map(level => {
-                        const levelCount = allPeople.filter(p => (p.referral_level || 1) === level).length;
-                        return (
-                          <div key={level} className="flex justify-between items-center">
-                            <span className="text-sm">Level {level}</span>
-                            <div className="flex items-center space-x-2">
-                              <div className="w-20 bg-gray-200 rounded-full h-2">
-                                <div 
-                                  className="bg-blue-500 h-2 rounded-full" 
-                                  style={{ width: `${stats.totalPeople > 0 ? (levelCount / stats.totalPeople) * 100 : 0}%` }}
-                                ></div>
-                              </div>
-                              <span className="text-sm font-medium w-8">{levelCount}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-        </Tabs>
+        <Card>
+          <CardHeader>
+            <CardTitle>People by Referral Level</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={levelChartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="level" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="people" fill="#8884d8" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Management Tabs */}
+      <Tabs defaultValue="properties" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="properties">Property Management</TabsTrigger>
+          <TabsTrigger value="people">Person Management</TabsTrigger>
+          <TabsTrigger value="levels">Level Management</TabsTrigger>
+          <TabsTrigger value="calculator">Commission Calculator</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="properties">
+          <PropertyManager />
+        </TabsContent>
+
+        <TabsContent value="people">
+          <PersonManager />
+        </TabsContent>
+
+        <TabsContent value="levels">
+          <LevelManager />
+        </TabsContent>
+
+        <TabsContent value="calculator">
+          <CommissionCalculator />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

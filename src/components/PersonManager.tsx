@@ -17,13 +17,15 @@ interface Person {
   last_name: string;
   phone: string | null;
   email: string;
-  referred_by?: string;
-  referral_level?: number;
+  referred_by?: string | null;
+  referral_level?: number | null;
+  created_at: string | null;
+  updated_at: string | null;
   referrer?: {
     first_name: string;
     last_name: string;
     username: string;
-  };
+  } | null;
 }
 
 const PersonManager = () => {
@@ -47,31 +49,50 @@ const PersonManager = () => {
 
   const fetchPeople = async () => {
     try {
+      console.log('Fetching people...');
       const { data, error } = await supabase
         .from('people')
-        .select(`
-          *,
-          referrer:people!people_referred_by_fkey (
-            first_name,
-            last_name,
-            username
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching people:', error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch people. Please try again.",
+          variant: "destructive",
+        });
         return;
       }
 
-      const formattedPeople = data?.map(person => ({
-        ...person,
-        referrer: Array.isArray(person.referrer) ? person.referrer[0] : person.referrer
-      })) || [];
-
-      setPeople(formattedPeople);
+      console.log('Fetched people:', data);
+      setPeople(data || []);
     } catch (error) {
       console.error('Error fetching people:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch people. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const fetchReferrerInfo = async (referredBy: string): Promise<Person | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('people')
+        .select('first_name, last_name, username')
+        .eq('id', referredBy)
+        .single();
+
+      if (error || !data) {
+        return null;
+      }
+
+      return data as Person;
+    } catch (error) {
+      console.error('Error fetching referrer:', error);
+      return null;
     }
   };
 
@@ -138,7 +159,7 @@ const PersonManager = () => {
           .from('people')
           .select('username')
           .eq('username', formData.username)
-          .single();
+          .maybeSingle();
 
         if (existingPerson) {
           toast({
@@ -146,12 +167,13 @@ const PersonManager = () => {
             description: "Please choose a different username.",
             variant: "destructive",
           });
+          setLoading(false);
           return;
         }
 
         let referralLevel = 1;
         if (formData.referred_by) {
-          referralLevel = await calculateUserLevel(formData.referred_by) + 1;
+          referralLevel = (await calculateUserLevel(formData.referred_by)) + 1;
         }
 
         const { error } = await supabase
@@ -175,7 +197,7 @@ const PersonManager = () => {
       }
 
       resetForm();
-      fetchPeople();
+      await fetchPeople(); // Refresh the people list
     } catch (error) {
       console.error('Error saving person:', error);
       toast({
@@ -217,7 +239,7 @@ const PersonManager = () => {
         description: "Person has been deleted successfully.",
       });
 
-      fetchPeople();
+      await fetchPeople(); // Refresh the people list
     } catch (error) {
       console.error('Error deleting person:', error);
       toast({
@@ -315,7 +337,7 @@ const PersonManager = () => {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="referred_by">Referred By (Optional)</Label>
-                <Select onValueChange={(value) => setFormData(prev => ({ ...prev, referred_by: value }))}>
+                <Select value={formData.referred_by} onValueChange={(value) => setFormData(prev => ({ ...prev, referred_by: value }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select who referred this person" />
                   </SelectTrigger>
@@ -359,61 +381,67 @@ const PersonManager = () => {
           <CardTitle>People List ({people.length} total)</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Username</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Level</TableHead>
-                <TableHead>Referred By</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {people.map((person) => (
-                <TableRow key={person.id}>
-                  <TableCell className="font-medium">
-                    {person.first_name} {person.last_name}
-                  </TableCell>
-                  <TableCell>@{person.username}</TableCell>
-                  <TableCell>{person.email}</TableCell>
-                  <TableCell>
-                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                      Level {person.referral_level || 1}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {person.referrer ? (
-                      <span className="text-sm text-green-600">
-                        {person.referrer.first_name} {person.referrer.last_name} (@{person.referrer.username})
-                      </span>
-                    ) : (
-                      <span className="text-sm text-blue-600">Root User</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEdit(person)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => handleDelete(person.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
+          {people.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              No people added yet. Add your first person above!
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Username</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Level</TableHead>
+                  <TableHead>Referred By</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {people.map((person) => (
+                  <TableRow key={person.id}>
+                    <TableCell className="font-medium">
+                      {person.first_name} {person.last_name}
+                    </TableCell>
+                    <TableCell>@{person.username}</TableCell>
+                    <TableCell>{person.email}</TableCell>
+                    <TableCell>
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                        Level {person.referral_level || 1}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {person.referred_by ? (
+                        <span className="text-sm text-green-600">
+                          Referred by someone
+                        </span>
+                      ) : (
+                        <span className="text-sm text-blue-600">Root User</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEdit(person)}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleDelete(person.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
