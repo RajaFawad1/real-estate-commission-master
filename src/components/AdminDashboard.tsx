@@ -2,10 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { DollarSign, Users, Home, Calculator, TrendingUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
+import { AppSidebar } from './AppSidebar';
 import PropertyManager from './PropertyManager';
 import PersonManager from './PersonManager';
 import CommissionCalculator from './CommissionCalculator';
@@ -36,9 +37,19 @@ interface Person {
   updated_at: string | null;
 }
 
+interface Level {
+  id: string;
+  name: string;
+  commission_percentage: number;
+  level_order: number;
+  property_id?: string | null;
+}
+
 const AdminDashboard = () => {
+  const [activeTab, setActiveTab] = useState('properties');
   const [properties, setProperties] = useState<Property[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
+  const [levels, setLevels] = useState<Level[]>([]);
   const [commissions, setCommissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -73,6 +84,18 @@ const AdminDashboard = () => {
         setPeople(peopleData || []);
       }
 
+      // Fetch levels
+      const { data: levelsData, error: levelsError } = await supabase
+        .from('levels')
+        .select('*')
+        .order('level_order', { ascending: true });
+
+      if (levelsError) {
+        console.error('Error fetching levels:', levelsError);
+      } else {
+        setLevels(levelsData || []);
+      }
+
       // Fetch commissions
       const { data: commissionsData, error: commissionsError } = await supabase
         .from('commissions')
@@ -89,6 +112,24 @@ const AdminDashboard = () => {
       console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCommissionUpdate = async (levelOrder: number, commission: number) => {
+    try {
+      const { error } = await supabase
+        .from('levels')
+        .update({ commission_percentage: commission })
+        .eq('level_order', levelOrder);
+
+      if (error) {
+        console.error('Error updating commission:', error);
+      } else {
+        // Refresh levels data
+        fetchDashboardData();
+      }
+    } catch (error) {
+      console.error('Error updating commission:', error);
     }
   };
 
@@ -131,135 +172,137 @@ const AdminDashboard = () => {
     );
   }
 
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'properties':
+        return <PropertyManager />;
+      case 'people':
+        return <PersonManager />;
+      case 'levels':
+        return <LevelManager levels={levels} onCommissionUpdate={handleCommissionUpdate} />;
+      case 'calculator':
+        return <CommissionCalculator />;
+      default:
+        return (
+          <div className="space-y-6">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Properties</CardTitle>
+                  <Home className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{totalProperties}</div>
+                  <p className="text-xs text-muted-foreground">Properties in system</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total People</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{totalPeople}</div>
+                  <p className="text-xs text-muted-foreground">People in network</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Property Value</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">${totalPropertyValue.toLocaleString()}</div>
+                  <p className="text-xs text-muted-foreground">Combined property value</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Commissions</CardTitle>
+                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">${totalCommissions.toLocaleString()}</div>
+                  <p className="text-xs text-muted-foreground">Commissions calculated</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Property Types Distribution</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={chartData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {chartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>People by Referral Level</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={levelChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="level" />
+                      <YAxis />
+                      <Tooltip />
+                      <Bar dataKey="people" fill="#8884d8" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        );
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-        <Button onClick={fetchDashboardData} variant="outline">
-          Refresh Data
-        </Button>
+    <SidebarProvider>
+      <div className="min-h-screen flex w-full">
+        <AppSidebar activeTab={activeTab} onTabChange={setActiveTab} />
+        <SidebarInset className="flex-1">
+          <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+            <SidebarTrigger className="-ml-1" />
+            <div className="flex items-center justify-between w-full">
+              <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+              <Button onClick={fetchDashboardData} variant="outline">
+                Refresh Data
+              </Button>
+            </div>
+          </header>
+          <div className="flex-1 p-6">
+            {renderContent()}
+          </div>
+        </SidebarInset>
       </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Properties</CardTitle>
-            <Home className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalProperties}</div>
-            <p className="text-xs text-muted-foreground">Properties in system</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total People</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalPeople}</div>
-            <p className="text-xs text-muted-foreground">People in network</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Property Value</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${totalPropertyValue.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">Combined property value</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Commissions</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${totalCommissions.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">Commissions calculated</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Property Types Distribution</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>People by Referral Level</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={levelChartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="level" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="people" fill="#8884d8" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Management Tabs */}
-      <Tabs defaultValue="properties" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="properties">Property Management</TabsTrigger>
-          <TabsTrigger value="people">Person Management</TabsTrigger>
-          <TabsTrigger value="levels">Level Management</TabsTrigger>
-          <TabsTrigger value="calculator">Commission Calculator</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="properties">
-          <PropertyManager />
-        </TabsContent>
-
-        <TabsContent value="people">
-          <PersonManager />
-        </TabsContent>
-
-        <TabsContent value="levels">
-          <LevelManager />
-        </TabsContent>
-
-        <TabsContent value="calculator">
-          <CommissionCalculator />
-        </TabsContent>
-      </Tabs>
-    </div>
+    </SidebarProvider>
   );
 };
 

@@ -1,7 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -47,6 +46,8 @@ interface CommissionResult {
   percentage: number;
   amount: number;
   people: Person[];
+  totalAmount: number;
+  perPersonAmount: number;
 }
 
 const CommissionCalculator = () => {
@@ -135,30 +136,29 @@ const CommissionCalculator = () => {
 
     for (const level of levels) {
       const levelPeople = people.filter(p => p.referral_level === level.level_order);
-      const commissionAmount = (property.price * level.commission_percentage) / 100;
+      const totalCommissionAmount = (property.price * level.commission_percentage) / 100;
+      const perPersonAmount = levelPeople.length > 0 ? totalCommissionAmount / levelPeople.length : 0;
 
       results.push({
         level: level.name,
         percentage: level.commission_percentage,
-        amount: commissionAmount,
-        people: levelPeople
+        amount: totalCommissionAmount,
+        people: levelPeople,
+        totalAmount: totalCommissionAmount,
+        perPersonAmount: perPersonAmount
       });
-    }
 
-    setCommissionResults(results);
-
-    // Save commission calculations to database
-    for (const result of results) {
-      for (const person of result.people) {
+      // Save commission calculations to database for each person
+      for (const person of levelPeople) {
         try {
           await supabase
             .from('commissions')
             .insert({
               property_id: selectedProperty,
               person_id: person.id,
-              level_id: levels.find(l => l.name === result.level)?.id,
-              commission_percentage: result.percentage,
-              commission_amount: result.amount
+              level_id: level.id,
+              commission_percentage: level.commission_percentage,
+              commission_amount: perPersonAmount
             });
         } catch (error) {
           console.error('Error saving commission:', error);
@@ -166,14 +166,12 @@ const CommissionCalculator = () => {
       }
     }
 
+    setCommissionResults(results);
+
     toast({
       title: "Commissions Calculated",
       description: "Commission calculations have been completed and saved.",
     });
-  };
-
-  const handleCalculate = () => {
-    calculateCommissions();
   };
 
   const selectedPropertyData = properties.find(p => p.id === selectedProperty);
@@ -191,7 +189,7 @@ const CommissionCalculator = () => {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="property">Select Property</Label>
+              <label htmlFor="property">Select Property</label>
               <Select value={selectedProperty} onValueChange={setSelectedProperty}>
                 <SelectTrigger>
                   <SelectValue placeholder="Choose a property" />
@@ -207,7 +205,7 @@ const CommissionCalculator = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="seller">Select Seller</Label>
+              <label htmlFor="seller">Select Seller</label>
               <Select value={selectedSeller} onValueChange={setSelectedSeller}>
                 <SelectTrigger>
                   <SelectValue placeholder="Choose a seller" />
@@ -232,7 +230,7 @@ const CommissionCalculator = () => {
             </div>
           )}
 
-          <Button onClick={handleCalculate} className="w-full" disabled={!selectedProperty || !selectedSeller}>
+          <Button onClick={calculateCommissions} className="w-full" disabled={!selectedProperty || !selectedSeller}>
             <DollarSign className="w-4 h-4 mr-2" />
             Calculate Commissions
           </Button>
@@ -250,9 +248,10 @@ const CommissionCalculator = () => {
                 <TableRow>
                   <TableHead>Level</TableHead>
                   <TableHead>Commission %</TableHead>
-                  <TableHead>Commission Amount</TableHead>
+                  <TableHead>Total Amount</TableHead>
                   <TableHead>People Count</TableHead>
-                  <TableHead>People</TableHead>
+                  <TableHead>Per Person</TableHead>
+                  <TableHead>People Details</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -260,14 +259,20 @@ const CommissionCalculator = () => {
                   <TableRow key={index}>
                     <TableCell className="font-medium">{result.level}</TableCell>
                     <TableCell>{result.percentage}%</TableCell>
-                    <TableCell>${result.amount.toLocaleString()}</TableCell>
+                    <TableCell>${result.totalAmount.toLocaleString()}</TableCell>
                     <TableCell>{result.people.length}</TableCell>
+                    <TableCell>
+                      {result.people.length > 0 ? `$${result.perPersonAmount.toLocaleString()}` : '$0'}
+                    </TableCell>
                     <TableCell>
                       {result.people.length > 0 ? (
                         <div className="space-y-1">
                           {result.people.map(person => (
                             <div key={person.id} className="text-sm">
                               {person.first_name} {person.last_name} (@{person.username})
+                              <div className="text-green-600 font-medium">
+                                Gets: ${result.perPersonAmount.toLocaleString()}
+                              </div>
                             </div>
                           ))}
                         </div>

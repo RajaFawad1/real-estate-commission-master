@@ -5,13 +5,25 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { User, UserPlus } from 'lucide-react';
-import { Person } from './CommissionCalculator';
+
+export interface Person {
+  id: string;
+  username: string;
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  email: string;
+  referral_level?: number | null;
+  referred_by?: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
 
 interface PeopleManagerProps {
   levelId: string;
   levelName: string;
   people: Person[];
-  onAddPerson: (levelId: string, person: Omit<Person, 'id'>) => boolean;
+  onAddPerson: (levelId: string, person: Omit<Person, 'id' | 'created_at' | 'updated_at'>) => boolean;
 }
 
 const PeopleManager = ({ levelId, levelName, people, onAddPerson }: PeopleManagerProps) => {
@@ -30,12 +42,14 @@ const PeopleManager = ({ levelId, levelName, people, onAddPerson }: PeopleManage
       return;
     }
 
-    const newPerson: Omit<Person, 'id'> = {
+    const newPerson: Omit<Person, 'id' | 'created_at' | 'updated_at'> = {
       username: formData.username,
       first_name: formData.first_name,
       last_name: formData.last_name,
-      phone: formData.phone,
-      email: formData.email
+      phone: formData.phone || null,
+      email: formData.email,
+      referral_level: null,
+      referred_by: null
     };
 
     const success = onAddPerson(levelId, newPerson);
