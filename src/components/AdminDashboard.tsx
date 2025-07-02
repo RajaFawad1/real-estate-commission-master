@@ -96,6 +96,11 @@ const AdminDashboard = () => {
         setLevels(levelsData || []);
       }
 
+      // If no levels exist, create default ones
+      if (!levelsData || levelsData.length === 0) {
+        await createDefaultLevels();
+      }
+
       // Fetch commissions
       const { data: commissionsData, error: commissionsError } = await supabase
         .from('commissions')
@@ -115,6 +120,32 @@ const AdminDashboard = () => {
     }
   };
 
+  const createDefaultLevels = async () => {
+    const defaultLevels = [
+      { name: 'Level 1', level_order: 1, commission_percentage: 5.0 },
+      { name: 'Level 2', level_order: 2, commission_percentage: 3.0 },
+      { name: 'Level 3', level_order: 3, commission_percentage: 2.0 },
+      { name: 'Level 4', level_order: 4, commission_percentage: 1.5 },
+      { name: 'Level 5', level_order: 5, commission_percentage: 1.0 },
+    ];
+
+    try {
+      const { data, error } = await supabase
+        .from('levels')
+        .insert(defaultLevels)
+        .select();
+
+      if (error) {
+        console.error('Error creating default levels:', error);
+      } else {
+        setLevels(data || []);
+        console.log('Default levels created successfully');
+      }
+    } catch (error) {
+      console.error('Error creating default levels:', error);
+    }
+  };
+
   const handleCommissionUpdate = async (levelOrder: number, commission: number) => {
     try {
       const { error } = await supabase
@@ -125,8 +156,13 @@ const AdminDashboard = () => {
       if (error) {
         console.error('Error updating commission:', error);
       } else {
-        // Refresh levels data
-        fetchDashboardData();
+        // Update local state
+        setLevels(prev => prev.map(level => 
+          level.level_order === levelOrder 
+            ? { ...level, commission_percentage: commission }
+            : level
+        ));
+        console.log(`Commission updated for level ${levelOrder}: ${commission}%`);
       }
     } catch (error) {
       console.error('Error updating commission:', error);
