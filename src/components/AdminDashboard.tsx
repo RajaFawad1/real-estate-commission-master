@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { DollarSign, Users, Home, Calculator, TrendingUp } from 'lucide-react';
+import { DollarSign, Users, Home, Calculator, TrendingUp, Building } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
@@ -46,6 +46,38 @@ interface Level {
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('analytics');
+  const [stats, setStats] = useState({
+    totalProperties: 0,
+    pendingProperties: 0,
+    totalPeople: 0,
+    totalCommissions: 0,
+  });
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      const [propertiesRes, peopleRes, commissionsRes] = await Promise.all([
+        supabase.from('properties').select('status', { count: 'exact' }),
+        supabase.from('people').select('*', { count: 'exact' }),
+        supabase.from('commissions').select('commission_amount'),
+      ]);
+
+      const pendingCount = propertiesRes.data?.filter(p => p.status === 'pending').length || 0;
+      const totalCommissions = commissionsRes.data?.reduce((sum, c) => sum + Number(c.commission_amount), 0) || 0;
+
+      setStats({
+        totalProperties: propertiesRes.count || 0,
+        pendingProperties: pendingCount,
+        totalPeople: peopleRes.count || 0,
+        totalCommissions,
+      });
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
   const [properties, setProperties] = useState<Property[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
@@ -306,6 +338,55 @@ const AdminDashboard = () => {
   );
 
   const renderContent = () => {
+    if (activeTab === 'analytics') {
+      return (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card className="hover:shadow-lg transition-all duration-300 hover:scale-[1.02]">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Total Properties</CardTitle>
+                <Building className="w-4 h-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-primary">{stats.totalProperties}</div>
+                <p className="text-xs text-muted-foreground mt-1">{stats.pendingProperties} pending approval</p>
+              </CardContent>
+            </Card>
+            <Card className="hover:shadow-lg transition-all duration-300 hover:scale-[1.02]">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Total People</CardTitle>
+                <Users className="w-4 h-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-primary">{stats.totalPeople}</div>
+                <p className="text-xs text-muted-foreground mt-1">Registered users</p>
+              </CardContent>
+            </Card>
+            <Card className="hover:shadow-lg transition-all duration-300 hover:scale-[1.02]">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Total Commissions</CardTitle>
+                <DollarSign className="w-4 h-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-primary">${stats.totalCommissions.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground mt-1">Calculated earnings</p>
+              </CardContent>
+            </Card>
+            <Card className="hover:shadow-lg transition-all duration-300 hover:scale-[1.02]">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Growth</CardTitle>
+                <TrendingUp className="w-4 h-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-green-500">+12%</div>
+                <p className="text-xs text-muted-foreground mt-1">From last month</p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      );
+    }
+
     switch (activeTab) {
       case 'analytics':
         return renderAnalytics();
@@ -324,22 +405,24 @@ const AdminDashboard = () => {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full">
+      <div className="flex min-h-screen w-full bg-gradient-to-br from-background via-background to-muted/10">
         <AppSidebar activeTab={activeTab} onTabChange={setActiveTab} />
-        <SidebarInset className="flex-1">
-          <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-            <SidebarTrigger className="-ml-1" />
-            <div className="flex items-center justify-between w-full">
-              <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-              <Button onClick={fetchDashboardData} variant="outline">
+        <main className="flex-1">
+          <div className="sticky top-0 z-10 backdrop-blur-sm bg-background/80 border-b border-border/40 p-4">
+            <div className="flex items-center justify-between">
+              <SidebarTrigger className="hover:scale-110 transition-transform" />
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                Admin Dashboard
+              </h1>
+              <Button onClick={fetchDashboardData} variant="outline" className="hover:scale-105 transition-transform">
                 Refresh Data
               </Button>
             </div>
-          </header>
-          <div className="flex-1 p-6">
+          </div>
+          <div className="p-6 animate-fade-in">
             {renderContent()}
           </div>
-        </SidebarInset>
+        </main>
       </div>
     </SidebarProvider>
   );

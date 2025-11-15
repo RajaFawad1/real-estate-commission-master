@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +5,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Building, Plus, Edit, Trash2 } from 'lucide-react';
+import { Building, Plus, Edit, Trash2, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -16,6 +16,7 @@ interface Property {
   price: number;
   property_type: string;
   address: string;
+  status: string;
   created_at: string;
 }
 
@@ -156,6 +157,65 @@ const PropertyManager = () => {
     }
   };
 
+  const handleApproveProperty = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('properties')
+        .update({ status: 'approved' })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Property approved successfully",
+      });
+      fetchProperties();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRejectProperty = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('properties')
+        .update({ status: 'rejected' })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Property rejected",
+      });
+      fetchProperties();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return <Badge className="bg-green-500 hover:bg-green-600"><CheckCircle className="w-3 h-3 mr-1" />Approved</Badge>;
+      case 'pending':
+        return <Badge className="bg-yellow-500 hover:bg-yellow-600"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
+      case 'rejected':
+        return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       property_name: '',
@@ -267,6 +327,7 @@ const PropertyManager = () => {
                 <TableHead>Price</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Address</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -277,8 +338,30 @@ const PropertyManager = () => {
                   <TableCell>€{property.price.toLocaleString()}</TableCell>
                   <TableCell className="capitalize">{property.property_type}</TableCell>
                   <TableCell>{property.address}</TableCell>
+                  <TableCell>{getStatusBadge(property.status)}</TableCell>
                   <TableCell>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
+                      {property.status === 'pending' && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => handleApproveProperty(property.id)}
+                            className="bg-green-500 hover:bg-green-600"
+                          >
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleRejectProperty(property.id)}
+                          >
+                            <XCircle className="w-4 h-4 mr-1" />
+                            Reject
+                          </Button>
+                        </>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
