@@ -177,20 +177,26 @@ const PersonManager = () => {
           referralLevel = (await calculateUserLevel(formData.referred_by)) + 1;
         }
 
-        // Create auth user first
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email: formData.email,
-          password: formData.password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/`,
-            data: {
+        // Create auth user via edge function (auto-confirms email)
+        const response = await fetch(
+          `https://gycsxuqegpgreackwpoa.supabase.co/functions/v1/create-user`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+            },
+            body: JSON.stringify({
+              email: formData.email,
+              password: formData.password,
               first_name: formData.first_name,
               last_name: formData.last_name,
-            }
+            }),
           }
-        });
+        );
 
-        if (authError) throw authError;
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Failed to create user');
 
         const { error } = await supabase
           .from('people')
