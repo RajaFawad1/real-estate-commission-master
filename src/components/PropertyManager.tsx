@@ -88,13 +88,16 @@ const PropertyManager = () => {
           description: "Property has been updated successfully.",
         });
       } else {
+        const { data: { user } } = await supabase.auth.getUser();
         const { error } = await supabase
           .from('properties')
           .insert([{
             property_name: formData.property_name,
             price: formData.price,
             property_type: formData.property_type as "residential" | "commercial" | "industrial" | "land" | "luxury",
-            address: formData.address
+            address: formData.address,
+            created_by: user?.id,
+            status: 'approved'
           }]);
 
         if (error) throw error;
