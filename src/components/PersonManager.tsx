@@ -196,7 +196,16 @@ const PersonManager = () => {
         );
 
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Failed to create user');
+        if (!response.ok) {
+          const errorMessage = result.error || 'Failed to create user';
+          if (errorMessage.toLowerCase().includes('already') || errorMessage.toLowerCase().includes('exists') || errorMessage.toLowerCase().includes('duplicate')) {
+            throw new Error('This email address is already registered. Please use a different email.');
+          } else if (errorMessage.toLowerCase().includes('password')) {
+            throw new Error('Password must be at least 6 characters long.');
+          } else {
+            throw new Error(errorMessage);
+          }
+        }
 
         const { error } = await supabase
           .from('people')
@@ -219,12 +228,12 @@ const PersonManager = () => {
       }
 
       resetForm();
-      await fetchPeople(); // Refresh the people list
-    } catch (error) {
+      await fetchPeople();
+    } catch (error: any) {
       console.error('Error saving person:', error);
       toast({
         title: "Error",
-        description: "Failed to save person. Please try again.",
+        description: error.message || "Failed to save person. Please try again.",
         variant: "destructive",
       });
     } finally {
