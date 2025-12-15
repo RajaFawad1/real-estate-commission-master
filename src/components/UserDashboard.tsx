@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Home, DollarSign, Calendar, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { Plus, Home, DollarSign, Calendar, CheckCircle, Clock, XCircle, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,16 @@ const UserDashboard = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { toast } = useToast();
   const [user, setUser] = useState<any>(null);
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast({
+      title: "Logged out",
+      description: "You have been logged out successfully.",
+    });
+    navigate('/');
+  };
 
   const [newProperty, setNewProperty] = useState<{
     property_name: string;
@@ -169,9 +180,14 @@ const UserDashboard = () => {
             <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
               My Properties
             </h1>
-            <p className="text-muted-foreground mt-2">Manage your property listings</p>
+            <p className="text-muted-foreground mt-2">Welcome, {user?.email}</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={handleLogout} className="gap-2">
+              <LogOut className="w-4 h-4" />
+              Logout
+            </Button>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button size="lg" className="shadow-lg hover:shadow-xl transition-all">
                 <Plus className="w-5 h-5 mr-2" />
@@ -232,7 +248,8 @@ const UserDashboard = () => {
                 <Button type="submit" className="w-full">Submit for Approval</Button>
               </form>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+          </div>
         </div>
 
         {/* Stats Cards */}

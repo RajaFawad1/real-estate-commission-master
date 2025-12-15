@@ -38,6 +38,7 @@ const PersonManager = () => {
     last_name: '',
     phone: '',
     email: '',
+    password: '',
     referred_by: ''
   });
   const [loading, setLoading] = useState(false);
@@ -122,10 +123,10 @@ const PersonManager = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.username || !formData.first_name || !formData.last_name || !formData.email) {
+    if (!formData.username || !formData.first_name || !formData.last_name || !formData.email || (!isEditing && !formData.password)) {
       toast({
         title: "Missing information",
-        description: "Please fill in all required fields.",
+        description: "Please fill in all required fields including password.",
         variant: "destructive",
       });
       return;
@@ -176,6 +177,21 @@ const PersonManager = () => {
           referralLevel = (await calculateUserLevel(formData.referred_by)) + 1;
         }
 
+        // Create auth user first
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/`,
+            data: {
+              first_name: formData.first_name,
+              last_name: formData.last_name,
+            }
+          }
+        });
+
+        if (authError) throw authError;
+
         const { error } = await supabase
           .from('people')
           .insert([{
@@ -192,7 +208,7 @@ const PersonManager = () => {
 
         toast({
           title: "Person added",
-          description: `Person has been added successfully at Level ${referralLevel}.`,
+          description: `Person has been added with login credentials at Level ${referralLevel}.`,
         });
       }
 
@@ -217,6 +233,7 @@ const PersonManager = () => {
       last_name: person.last_name,
       phone: person.phone || '',
       email: person.email,
+      password: '',
       referred_by: person.referred_by || ''
     });
     setIsEditing(true);
@@ -257,6 +274,7 @@ const PersonManager = () => {
       last_name: '',
       phone: '',
       email: '',
+      password: '',
       referred_by: ''
     });
     setIsEditing(false);
@@ -335,21 +353,35 @@ const PersonManager = () => {
                   onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="referred_by">Referred By (Optional)</Label>
-                <Select value={formData.referred_by} onValueChange={(value) => setFormData(prev => ({ ...prev, referred_by: value }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select who referred this person" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {people.filter(p => p.id !== editingId).map(person => (
-                      <SelectItem key={person.id} value={person.id}>
-                        {person.first_name} {person.last_name} (@{person.username}) - Level {person.referral_level || 1}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {!isEditing && (
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password *</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Enter login password"
+                    value={formData.password}
+                    onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                    required
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="referred_by">Referred By (Optional)</Label>
+              <Select value={formData.referred_by} onValueChange={(value) => setFormData(prev => ({ ...prev, referred_by: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select who referred this person" />
+                </SelectTrigger>
+                <SelectContent>
+                  {people.filter(p => p.id !== editingId).map(person => (
+                    <SelectItem key={person.id} value={person.id}>
+                      {person.first_name} {person.last_name} (@{person.username}) - Level {person.referral_level || 1}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex gap-2">
